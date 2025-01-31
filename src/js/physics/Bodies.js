@@ -1,103 +1,101 @@
-import { Body } from './Body.js';
-import { Vertices } from './Vertices.js';
-import { Vector2 } from './Vector2.js';
+import { Body } from './Body.js'
+import { Vertices } from './Vertices.js'
+import { Vec2 } from './Vec2.js'
 
 export const Bodies = {
-  circle: function (x, y, radius, option) {
-    if (typeof option !== 'object') option = {};
+  circle: function (x, y, radius, option = {}) {
+    if (typeof option != 'object') throw `Body's option must be of type object!`
 
     const properties = {
       label: 'circle',
       type: 'rigid',
-      position: new Vector2(x, y),
-      axisPoint: new Vector2(x + radius, y),
+      position: new Vec2(x, y),
+      axisPoint: new Vec2(x + radius, y),
       radius: radius
-    };
+    }
 
-    return new Body(properties, option);
+    return new Body(properties, option)
   },
 
-  rectangle: function (x, y, width, height, option) {
-    if (typeof option !== 'object') option = {};
+  rectangle: function (x, y, width, height, option = {}) {
+    if (typeof option != 'object') throw `Body's option must be of type object!`
 
     const vertices = [
-      new Vector2(x - width * 0.5, y - height * 0.5),
-      new Vector2(x + width * 0.5, y - height * 0.5),
-      new Vector2(x + width * 0.5, y + height * 0.5),
-      new Vector2(x - width * 0.5, y + height * 0.5)
-    ];
+      new Vec2(x - width * 0.5, y - height * 0.5),
+      new Vec2(x + width * 0.5, y - height * 0.5),
+      new Vec2(x + width * 0.5, y + height * 0.5),
+      new Vec2(x - width * 0.5, y + height * 0.5)
+    ]
 
     const properties = {
       label: 'rectangle',
       type: 'rigid',
-      position: new Vector2(x, y),
-      axisPoint: new Vector2(
+      position: new Vec2(x, y),
+      axisPoint: new Vec2(
         width > height
           ? x + width * 0.5
-          : width === height
+          : width == height
           ? x + width * 0.5
           : x,
-        height > width ? y + height * 0.5 : height === width ? y : y
+        height > width ? y + height * 0.5 : height == width ? y : y
       ),
       vertices: vertices,
       width: width,
       height: height
-    };
+    }
 
-    return new Body(properties, option);
+    return new Body(properties, option)
   },
 
-  pill: function (x, y, radius, height, option) {
-    if (typeof option !== 'object') option = {};
+  pill: function (x, y, radius, height, option = {}) {
+    if (typeof option != 'object') throw `Body's option must be of type object!`
 
     const vertices = [
-      new Vector2(x - radius, y - height * 0.5),
-      new Vector2(x + radius, y - height * 0.5),
-      new Vector2(x + radius, y + height * 0.5),
-      new Vector2(x - radius, y + height * 0.5)
-    ];
+      new Vec2(x - radius, y - height * 0.5),
+      new Vec2(x + radius, y - height * 0.5),
+      new Vec2(x + radius, y + height * 0.5),
+      new Vec2(x - radius, y + height * 0.5)
+    ]
 
     const properties = {
       label: 'pill',
       type: 'rigid',
-      position: new Vector2(x, y),
-      startPoint: new Vector2(x, y - height * 0.5),
-      endPoint: new Vector2(x, y + height * 0.5),
+      position: new Vec2(x, y),
+      startPoint: new Vec2(x, y - height * 0.5),
+      endPoint: new Vec2(x, y + height * 0.5),
       vertices: vertices,
       radius: radius,
       height: height
-    };
-
-    return new Body(properties, option);
-  },
-
-  polygon: function (x, y, radius, sides, option) {
-    if (typeof option !== 'object') option = {};
-
-    sides = sides < 3 ? 3 : sides > 8 ? 8 : sides;
-
-    const vertices = [];
-    let axisPoint = null;
-
-    for (let i = 0; i < sides; i++) {
-      const angle = (i / sides) * Math.PI * 2;
-
-      vertices.push(
-        new Vector2(x + radius * Math.cos(angle), y + radius * Math.sin(angle))
-      );
     }
 
-    axisPoint = new Vector2(x + radius, y);
+    return new Body(properties, option)
+  },
 
+  polygon: function (vertices = [], option = {}) {
+    if (typeof option != 'object') throw `Body's option must be of type object!`
+
+    if (vertices.length < 3)
+      throw `Polygon's body expects atleast 3 or more vertices!`
+
+    if (!Vertices.isConvex(vertices)) {
+      console.warn('Please provide a valid shape.')
+      throw `Currently the engine doesn't support a concave polygon!`
+    }
+
+    vertices = vertices.map(point => new Vec2(point.x, point.y))
+
+    const centroid = Vertices.centroid(vertices)
+    const direction = Vec2.subtract(vertices[0], centroid)
+    const axisPoint = Vec2.add(centroid, direction)
     const properties = {
       label: 'polygon',
       type: 'rigid',
-      position: new Vector2(x, y),
+      position: new Vec2(centroid.x, centroid.y),
       axisPoint: axisPoint,
       vertices: vertices,
-      radius: radius
-    };
+      radius: Math.abs(direction.x)
+    }
 
-    return new Body(properties, option);
+    return new Body(properties, option)
   }
-};
+}

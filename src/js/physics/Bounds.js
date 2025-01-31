@@ -1,56 +1,58 @@
+import { Vec2 } from './Vec2.js'
+
 export class Bounds {
   static getBound(body) {
-    let min = [Infinity, Infinity];
-    let max = [-Infinity, -Infinity];
+    const min = new Vec2(Infinity, Infinity)
+    const max = new Vec2(-Infinity, -Infinity)
 
-    if (body.label === 'circle') {
-      min[0] = body.position.x - body.radius;
-      min[1] = body.position.y - body.radius;
-      max[0] = body.position.x + body.radius;
-      max[1] = body.position.y + body.radius;
-    } else if (body.label === 'rectangle' || body.label === 'polygon') {
-      for (let i = 0; i < body.vertices.length; i++) {
-        const p1 = body.vertices[i];
+    if (body.label == 'circle') {
+      min.x = body.position.x - body.radius
+      min.y = body.position.y - body.radius
+      max.x = body.position.x + body.radius
+      max.y = body.position.y + body.radius
+    } else if (body.label == 'rectangle' || body.label == 'polygon') {
+      for (let i = 0; i < body.vertices.length; ++i) {
+        const p1 = body.vertices[i]
 
-        if (p1.x < min[0]) min[0] = p1.x;
-        if (p1.y < min[1]) min[1] = p1.y;
-        if (p1.x > max[0]) max[0] = p1.x;
-        if (p1.y > max[1]) max[1] = p1.y;
+        min.x = Math.min(p1.x, min.x)
+        min.y = Math.min(p1.y, min.y)
+        max.x = Math.max(p1.x, max.x)
+        max.y = Math.max(p1.y, max.y)
       }
-    } else if (body.label === 'pill') {
-      for (let i = 0; i < body.vertices.length; i++) {
-        const p1 = body.vertices[i];
+    } else if (body.label == 'pill') {
+      for (let i = 0; i < body.vertices.length; ++i) {
+        const p1 = body.vertices[i]
 
-        if (p1.x - body.radius < min[0]) min[0] = p1.x - body.radius;
-        if (p1.y - body.radius < min[1]) min[1] = p1.y - body.radius;
-        if (p1.x + body.radius > max[0]) max[0] = p1.x + body.radius;
-        if (p1.y + body.radius > max[1]) max[1] = p1.y + body.radius;
+        min.x = Math.min(p1.x - body.radius, min.x)
+        min.y = Math.min(p1.y - body.radius, min.y)
+        max.x = Math.max(p1.x + body.radius, max.x)
+        max.y = Math.max(p1.y + body.radius, max.y)
       }
     }
 
     return {
       min,
       max,
-      width: max[0] - min[0],
-      height: max[1] - min[1]
-    };
+      width: Math.abs(max.x - min.x),
+      height: Math.abs(max.y - min.y)
+    }
   }
 
   static contains(bounds, point) {
     return (
-      point.x >= bounds.min[0] &&
-      point.x <= bounds.max[0] &&
-      point.y >= bounds.min[1] &&
-      point.y <= bounds.max[1]
-    );
+      point.x >= bounds.min.x &&
+      point.x <= bounds.max.x &&
+      point.y >= bounds.min.y &&
+      point.y <= bounds.max.y
+    )
   }
 
   static overlaps(boundsA, boundsB) {
     return (
-      boundsA.min[0] <= boundsB.max[0] &&
-      boundsA.max[0] >= boundsB.min[0] &&
-      boundsA.max[1] >= boundsB.min[1] &&
-      boundsA.min[1] <= boundsB.max[1]
-    );
+      boundsA.min.x <= boundsB.max.x &&
+      boundsA.max.x >= boundsB.min.x &&
+      boundsA.max.y >= boundsB.min.y &&
+      boundsA.min.y <= boundsB.max.y
+    )
   }
 }

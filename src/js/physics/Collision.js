@@ -1,524 +1,522 @@
-import { Vector2 } from './Vector2.js';
+import { Vec2 } from './Vec2.js'
 
 export class Collision {
-  static _getAxes(vertices) {
-    const axes = [];
-    for (let i = 0; i < vertices.length; i++) {
-      const startPoint = vertices[i];
-      const endPoint = vertices[(i + 1) % vertices.length];
-      const edge = Vector2.subtract(endPoint, startPoint);
-      const axis = edge.perp().normalize();
-      axes.push(axis);
-    }
-    return axes;
+  static _edgesInDirection(vertices, direction) {
+    const n = vertices.length
+    let maxDistance = -Infinity
+    let edges = null
+
+    vertices.forEach((point, i) => {
+      const distance = point.dot(direction)
+
+      if (distance > maxDistance) {
+        maxDistance = distance
+        edges = [vertices[(i - 1 + n) % n], point, vertices[(i + 1) % n]]
+      }
+    })
+
+    return edges
   }
 
   static _projectPoints(points, radius, axis) {
-    let min = Infinity;
-    let max = -min;
+    let min = Infinity
+    let max = -Infinity
 
-    for (const point of points) {
-      const projection = point.dot(axis);
+    points.forEach(point => {
+      const projection = point.dot(axis)
 
-      if (projection - radius < min) min = projection - radius;
-      if (projection + radius > max) max = projection + radius;
-    }
-    return { min, max };
+      min = Math.min(projection, min)
+      max = Math.max(projection, max)
+    })
+
+    return { min: min - radius, max: max + radius }
   }
 
   static _projectPolygon(vertices, axis) {
-    let min = Infinity;
-    let max = -min;
+    let min = Infinity
+    let max = -Infinity
 
-    for (const point of vertices) {
-      const projection = point.dot(axis);
+    vertices.forEach(point => {
+      const projection = point.dot(axis)
 
-      if (projection < min) min = projection;
-      if (projection > max) max = projection;
-    }
+      min = Math.min(projection, min)
+      max = Math.max(projection, max)
+    })
 
-    return { min, max };
+    return { min, max }
   }
 
-  static _closestPointIndexOfVertices(vertices, targetPoint) {
-    let index = -1;
-    let minDistanceSq = Infinity;
+  static _closestPointOfVertices(vertices, targetPoint) {
+    let index = -1
+    let minDistanceSq = Infinity
 
-    for (let i = 0; i < vertices.length; i++) {
-      const distanceSq = Vector2.distance(vertices[i], targetPoint);
+    vertices.forEach((point, i) => {
+      const distanceSq = Vec2.distanceSq(point, targetPoint)
 
       if (distanceSq < minDistanceSq) {
-        minDistanceSq = distanceSq;
-        index = i;
+        minDistanceSq = distanceSq
+        index = i
       }
-    }
+    })
 
-    return index;
+    return vertices[index]
   }
 
   static _pointInLineSegment(startPoint, endPoint, targetPoint) {
-    const ab = Vector2.subtract(endPoint, startPoint);
-    const ap = Vector2.subtract(targetPoint, startPoint);
-    const abLengthSq = ab.magnitudeSq();
-    const projection = ap.dot(ab) / abLengthSq;
-    const contactPoint = Vector2.add(startPoint, ab.scale(projection));
+    const ab = Vec2.subtract(endPoint, startPoint)
+    const ap = Vec2.subtract(targetPoint, startPoint)
+    const abLengthSq = ab.magnitudeSq()
+    const projection = ap.dot(ab) / abLengthSq
+    const contactPoint = Vec2.add(startPoint, ab.scale(projection))
 
     if (projection < 0) {
-      contactPoint.copy(startPoint);
+      contactPoint.copy(startPoint)
     } else if (projection > 1) {
-      contactPoint.copy(endPoint);
+      contactPoint.copy(endPoint)
     }
 
-    const distanceSq = Vector2.distanceSq(targetPoint, contactPoint);
+    const distanceSq = Vec2.distanceSq(targetPoint, contactPoint)
 
-    return { contactPoint, distanceSq };
+    return { contactPoint, distanceSq }
   }
 
   // Circle To Circle
   static detectCircleToCircle(bodyA, bodyB) {
-    const direction = Vector2.subtract(bodyB.position, bodyA.position);
-    const distanceSq = direction.magnitudeSq();
-    const radii = bodyA.radius + bodyB.radius;
+    const direction = Vec2.subtract(bodyB.position, bodyA.position)
+    const distanceSq = direction.magnitudeSq()
+    const radii = bodyA.radius + bodyB.radius
 
-    if (distanceSq === 0 || distanceSq >= radii * radii) {
+    if (distanceSq == 0 || distanceSq >= radii * radii) {
       return {
         collision: false,
         normal: null,
-        overlapDepth: 0
-      };
+        overlapDepth: 0,
+        contactPoints: null
+      }
     }
 
-    const distance = Math.sqrt(distanceSq);
-    const normal = direction.scale(1 / distance);
-    const overlapDepth = (radii - distance) * 0.5;
+    const distance = Math.sqrt(distanceSq)
+    const normal = direction.scale(1 / distance)
+    const overlapDepth = radii - distance
 
     return {
       collision: true,
       normal,
-      overlapDepth
-    };
-  }
-
-  static supportsCircleToCircle(bodyA, normal) {
-    const contactPoint1 = Vector2.add(
-      bodyA.position,
-      Vector2.scale(normal, bodyA.radius)
-    ).add(normal.perp(), -2);
-    const contactPoint2 = Vector2.add(
-      bodyA.position,
-      Vector2.scale(normal, bodyA.radius)
-    ).add(normal.perp(), 2);
-
-    return [contactPoint1, contactPoint2];
+      overlapDepth,
+      contactPoints: [
+        Vec2.add(bodyA.position, Vec2.scale(normal, bodyA.radius))
+      ],
+      edgeA: true,
+      edgeB: true
+    }
   }
 
   // Circle To Polygon
   static detectCircleToRectangle(bodyA, bodyB) {
-    let normal = new Vector2();
-    let minOverlapDepth = Infinity;
+    const normal = new Vec2()
+    let minOverlapDepth = Infinity
 
-    const axes = this._getAxes(bodyB.vertices);
-    const closestPointIndex = this._closestPointIndexOfVertices(
-      bodyB.vertices,
-      bodyA.position
-    );
-    const circleToClosestPointAxis = Vector2.subtract(
-      bodyB.vertices[closestPointIndex],
-      bodyA.position
-    ).normalize();
+    const direction = Vec2.subtract(bodyB.position, bodyA.position)
+    const edges = this._edgesInDirection(bodyB.vertices, Vec2.negate(direction))
+    const closestPoint = this._closestPointOfVertices(edges, bodyA.position)
+    const axes = [
+      Vec2.subtract(closestPoint, bodyA.position).normalize(),
+      Vec2.subtract(edges[1], edges[0]).perp().normalize(),
+      Vec2.subtract(edges[2], edges[1]).perp().normalize()
+    ]
 
-    for (const axis of [circleToClosestPointAxis, ...axes]) {
-      const projA = this._projectPoints([bodyA.position], bodyA.radius, axis);
-      const projB = this._projectPolygon(bodyB.vertices, axis);
+    for (const axis of axes) {
+      const projA = this._projectPoints([bodyA.position], bodyA.radius, axis)
+      const projB = this._projectPolygon(bodyB.vertices, axis)
 
       if (projA.min > projB.max || projB.min > projA.max) {
         return {
           collision: false,
           normal: null,
-          overlapDepth: 0
-        };
+          overlapDepth: 0,
+          contactPoints: null
+        }
       }
 
       const axisOverlapDepth = Math.min(
         projA.max - projB.min,
         projB.max - projA.min
-      );
+      )
 
       if (axisOverlapDepth < minOverlapDepth) {
-        minOverlapDepth = axisOverlapDepth;
-        normal.copy(axis);
+        minOverlapDepth = axisOverlapDepth
+        normal.copy(axis)
       }
 
-      const direction = Vector2.subtract(bodyB.position, bodyA.position);
+      if (direction.dot(normal) < 0) normal.negate()
+    }
 
-      if (direction.dot(normal) < 0) normal.negate();
+    // Supporting points
+    let minDistanceSq = Infinity
+    let closestContactPoint = null
+
+    for (let i = 0; i < edges.length - 1; ++i) {
+      const currPoint = edges[i]
+      const nextPoint = edges[(i + 1) % edges.length]
+
+      const { contactPoint, distanceSq } = this._pointInLineSegment(
+        currPoint,
+        nextPoint,
+        bodyA.position
+      )
+
+      if (distanceSq < minDistanceSq) {
+        minDistanceSq = distanceSq
+        closestContactPoint = contactPoint
+      }
     }
 
     return {
       collision: true,
       normal,
-      overlapDepth: minOverlapDepth * 0.5
-    };
-  }
-
-  static supportsCircleToRectangle(targetPoint, vertices, normal) {
-    let minDistanceSq = Infinity;
-    let closestContactPoint = null;
-
-    for (let i = 0; i < vertices.length; i++) {
-      const startPoint = vertices[i];
-      const endPoint = vertices[(i + 1) % vertices.length];
-
-      const { contactPoint, distanceSq } = this._pointInLineSegment(
-        startPoint,
-        endPoint,
-        targetPoint
-      );
-
-      if (distanceSq < minDistanceSq) {
-        minDistanceSq = distanceSq;
-        closestContactPoint = contactPoint;
-      }
+      overlapDepth: minOverlapDepth,
+      contactPoints: [closestContactPoint],
+      edgeA: true,
+      edgeB: edges
     }
-
-    return [
-      Vector2.add(closestContactPoint, Vector2.scale(normal.perp(), -2)),
-      Vector2.add(closestContactPoint, Vector2.scale(normal.perp(), 2))
-    ];
   }
 
   // Polygon To Polygon
   static detectPolygonToPolygon(bodyA, bodyB) {
-    let normal = new Vector2();
-    let minOverlapDepth = Infinity;
+    const normal = new Vec2()
+    let minOverlapDepth = Infinity
+    const direction = Vec2.subtract(bodyB.position, bodyA.position)
+    const edgeA = this._edgesInDirection(bodyA.vertices, direction)
+    const edgeB = this._edgesInDirection(bodyB.vertices, Vec2.negate(direction))
 
-    const axesA = this._getAxes(bodyA.vertices);
-    const axesB = this._getAxes(bodyB.vertices);
+    const axes = [
+      Vec2.subtract(edgeA[1], edgeA[0]).perp().normalize(),
+      Vec2.subtract(edgeA[2], edgeA[1]).perp().normalize(),
+      Vec2.subtract(edgeB[1], edgeB[0]).perp().normalize(),
+      Vec2.subtract(edgeB[2], edgeB[1]).perp().normalize()
+    ]
 
-    for (const axis of [...axesA, ...axesB]) {
-      const projA = this._projectPolygon(bodyA.vertices, axis);
-      const projB = this._projectPolygon(bodyB.vertices, axis);
+    for (const axis of axes) {
+      const projA = this._projectPolygon(bodyA.vertices, axis)
+      const projB = this._projectPolygon(bodyB.vertices, axis)
 
       if (projA.min > projB.max || projB.min > projA.max) {
         return {
           collision: false,
           normal: null,
-          overlapDepth: 0
-        };
+          overlapDepth: 0,
+          contactPoints: null
+        }
       }
 
       const axisOverlapDepth = Math.min(
         projA.max - projB.min,
         projB.max - projA.min
-      );
+      )
 
       if (axisOverlapDepth < minOverlapDepth) {
-        minOverlapDepth = axisOverlapDepth;
-        normal.copy(axis);
+        minOverlapDepth = axisOverlapDepth
+        normal.copy(axis)
       }
 
-      const direction = Vector2.subtract(bodyB.position, bodyA.position);
-
-      if (direction.dot(normal) < 0) normal.negate();
+      if (direction.dot(normal) < 0) normal.negate()
     }
 
-    return {
-      collision: true,
-      normal,
-      overlapDepth: minOverlapDepth * 0.5
-    };
-  }
-
-  static supportsPolygonToPolygon(bodyA, bodyB) {
-    const contactPoint1 = new Vector2(Infinity, Infinity);
-    const contactPoint2 = new Vector2(Infinity, Infinity);
-    let contactCounts = 0;
-    let minDistanceSq = Infinity;
+    // Supporting points
+    const contactPoint1 = new Vec2()
+    const contactPoint2 = new Vec2()
+    let contactCounts = 0
+    let minDistanceSq = Infinity
 
     const findContactPoint = (points, vertices) => {
-      for (let i = 0; i < points.length; i++) {
-        const targetPoint = points[i];
-
-        for (let j = 0; j < vertices.length; j++) {
-          const startPoint = vertices[j];
-          const endPoint = vertices[(j + 1) % vertices.length];
+      points.forEach(point => {
+        for (let i = 0; i < vertices.length - 1; ++i) {
+          const currPoint = vertices[i]
+          const nextPoint = vertices[(i + 1) % vertices.length]
 
           const { contactPoint, distanceSq } = this._pointInLineSegment(
-            startPoint,
-            endPoint,
-            targetPoint
-          );
+            currPoint,
+            nextPoint,
+            point
+          )
 
           if (Math.abs(distanceSq - minDistanceSq) <= 5e-4) {
             if (
               !contactPoint.equal(contactPoint1) &&
               !contactPoint.equal(contactPoint2)
             ) {
-              minDistanceSq = distanceSq;
-              contactPoint2.copy(contactPoint);
-              contactCounts = 2;
+              minDistanceSq = distanceSq
+              contactPoint2.copy(contactPoint)
+              contactCounts = 2
             }
           } else if (distanceSq < minDistanceSq) {
-            minDistanceSq = distanceSq;
-            contactPoint1.copy(contactPoint);
-            contactCounts = 1;
+            minDistanceSq = distanceSq
+            contactPoint1.copy(contactPoint)
+            contactCounts = 1
           }
         }
-      }
-    };
-
-    findContactPoint(bodyA.vertices, bodyB.vertices);
-    findContactPoint(bodyB.vertices, bodyA.vertices);
-
-    const contactPoints = [];
-
-    if (contactCounts === 1) {
-      contactPoints.push(contactPoint1);
-    } else if (contactCounts === 2) {
-      contactPoints.push(contactPoint1, contactPoint2);
+      })
     }
 
-    return contactPoints;
+    findContactPoint(bodyA.vertices, edgeB)
+    findContactPoint(bodyB.vertices, edgeA)
+
+    const contactPoints = []
+
+    if (contactCounts == 1) {
+      contactPoints.push(contactPoint1)
+    } else if (contactCounts == 2) {
+      contactPoints.push(contactPoint1, contactPoint2)
+    }
+
+    const edgeDirectionA = Vec2.subtract(contactPoint1, bodyA.position)
+    const edgeDirectionB = Vec2.subtract(contactPoint1, bodyB.position)
+
+    const finalEdgeA = this._edgesInDirection(bodyA.vertices, edgeDirectionA)
+    const finalEdgeB = this._edgesInDirection(bodyB.vertices, edgeDirectionB)
+
+    return {
+      collision: true,
+      normal,
+      overlapDepth: minOverlapDepth,
+      contactPoints,
+      edgeA: finalEdgeA,
+      edgeB: finalEdgeB
+    }
   }
 
   // Polygon To Pill
   static detectPolygonToPill(bodyA, bodyB) {
-    const normal = new Vector2();
-    let minOverlapDepth = Infinity;
+    const normal = new Vec2()
+    let minOverlapDepth = Infinity
 
-    const axesA = this._getAxes(bodyA.vertices);
-    const axisB = Vector2.subtract(
+    const direction = Vec2.subtract(bodyB.position, bodyA.position)
+    const edges = this._edgesInDirection(bodyA.vertices, direction)
+    const pillSegment = Vec2.subtract(bodyB.startPoint, bodyB.endPoint)
+    const closestPoint = this._closestPointOfVertices(edges, bodyB.position)
+    const { contactPoint: pointInPillSegment } = this._pointInLineSegment(
       bodyB.startPoint,
-      bodyB.endPoint
-    ).normalize();
-    const axisBPerp = Vector2.subtract(bodyB.startPoint, bodyB.endPoint)
-      .perp()
-      .normalize();
+      bodyB.endPoint,
+      closestPoint
+    )
 
-    for (const axis of [...axesA, axisB, axisBPerp]) {
-      const projA = this._projectPolygon(bodyA.vertices, axis);
+    const axes = [
+      Vec2.subtract(pointInPillSegment, closestPoint).normalize(),
+      pillSegment.perp().normalize(),
+      Vec2.subtract(edges[1], edges[0]).perp().normalize(),
+      Vec2.subtract(edges[2], edges[1]).perp().normalize()
+    ]
+
+    for (const axis of axes) {
+      const projA = this._projectPolygon(bodyA.vertices, axis)
       const projB = this._projectPoints(
         [bodyB.startPoint, bodyB.endPoint],
         bodyB.radius,
         axis
-      );
+      )
 
       if (projA.min > projB.max || projB.min > projA.max) {
         return {
           collision: false,
           normal: null,
-          overlapDepth: 0
-        };
+          overlapDepth: 0,
+          contactPoints: null
+        }
       }
 
       const axisOverlapDepth = Math.min(
         projA.max - projB.min,
         projB.max - projA.min
-      );
+      )
 
       if (axisOverlapDepth < minOverlapDepth) {
-        minOverlapDepth = axisOverlapDepth;
-        normal.copy(axis);
+        minOverlapDepth = axisOverlapDepth
+        normal.copy(axis)
       }
 
-      const direction = Vector2.subtract(bodyB.position, bodyA.position);
-
-      if (direction.dot(normal) < 0) normal.negate();
+      if (direction.dot(normal) < 0) normal.negate()
     }
 
-    return {
-      collision: true,
-      normal,
-      overlapDepth: minOverlapDepth * 0.5
-    };
-  }
-
-  static supportsPolygonToPill(bodyA, bodyB, normal) {
-    const contactPoint1 = new Vector2(Infinity, Infinity);
-    const contactPoint2 = new Vector2(Infinity, Infinity);
-    let contactCounts = 0;
-    let minDistanceSq = Infinity;
+    // Supporting points
+    const contactPoint1 = new Vec2()
+    const contactPoint2 = new Vec2()
+    let contactCounts = 0
+    let minDistanceSq = Infinity
 
     const findContactPoint = (points, vertices) => {
-      for (let i = 0; i < points.length; i++) {
-        const targetPoint = points[i];
-
-        for (let j = 0; j < vertices.length; j++) {
-          const startPoint = vertices[j];
-          const endPoint = vertices[(j + 1) % vertices.length];
+      points.forEach(point => {
+        for (let i = 0; i < vertices.length - 1; ++i) {
+          const currPoint = vertices[i]
+          const nextPoint = vertices[(i + 1) % vertices.length]
 
           const { contactPoint, distanceSq } = this._pointInLineSegment(
-            startPoint,
-            endPoint,
-            targetPoint
-          );
+            currPoint,
+            nextPoint,
+            point
+          )
 
           if (Math.abs(distanceSq - minDistanceSq) <= 5e-4) {
             if (
               !contactPoint.equal(contactPoint1) &&
               !contactPoint.equal(contactPoint2)
             ) {
-              minDistanceSq = distanceSq;
-              contactPoint2.copy(contactPoint);
-              contactCounts = 2;
+              minDistanceSq = distanceSq
+              contactPoint2.copy(contactPoint)
+              contactCounts = 2
             }
           } else if (distanceSq < minDistanceSq) {
-            minDistanceSq = distanceSq;
-            contactPoint1.copy(contactPoint);
-            contactCounts = 1;
+            minDistanceSq = distanceSq
+            contactPoint1.copy(contactPoint)
+            contactCounts = 1
           }
         }
-      }
-    };
-
-    findContactPoint(bodyA.vertices, [bodyB.startPoint, bodyB.endPoint]);
-
-    const direction1 = Vector2.subtract(bodyA.position, contactPoint1);
-    const direction2 = Vector2.subtract(bodyA.position, contactPoint2);
-
-    if (direction1.dot(normal) < 0) {
-      contactPoint1.add(Vector2.scale(normal, -bodyB.radius));
-    } else {
-      contactPoint1.add(Vector2.scale(normal, bodyB.radius));
+      })
     }
 
-    if (direction2.dot(normal) < 0) {
-      contactPoint2.add(Vector2.scale(normal, -bodyB.radius));
-    } else {
-      contactPoint2.add(Vector2.scale(normal, bodyB.radius));
+    findContactPoint(bodyA.vertices, [bodyB.startPoint, bodyB.endPoint])
+
+    if (contactCounts == 1) {
+      contactPoint1.add(Vec2.scale(normal, -bodyB.radius))
+    } else if (contactCounts == 2) {
+      contactPoint1.add(Vec2.scale(normal, -bodyB.radius))
+      contactPoint2.add(Vec2.scale(normal, -bodyB.radius))
     }
 
-    findContactPoint([bodyB.startPoint, bodyB.endPoint], bodyA.vertices);
+    findContactPoint([bodyB.startPoint, bodyB.endPoint], edges)
 
-    const contactPoints = [];
+    const contactPoints = []
 
-    if (contactCounts === 1) {
-      contactPoints.push(contactPoint1);
-    } else if (contactCounts === 2) {
-      contactPoints.push(contactPoint1, contactPoint2);
+    if (contactCounts == 1) {
+      contactPoints.push(contactPoint1)
+    } else if (contactCounts == 2) {
+      contactPoints.push(contactPoint1, contactPoint2)
     }
 
-    return contactPoints;
+    const edgeDirectionA = Vec2.subtract(contactPoint1, bodyA.position)
+    const finalEdgeA = this._edgesInDirection(bodyA.vertices, edgeDirectionA)
+
+    return {
+      collision: true,
+      normal,
+      overlapDepth: minOverlapDepth,
+      contactPoints,
+      edgeA: finalEdgeA,
+      edgeB: pointInPillSegment
+    }
   }
 
   // Pill To Pill
   static detectPillToPill(bodyA, bodyB) {
-    let normal = new Vector2();
-    let minOverlapDepth = Infinity;
+    let normal = new Vec2()
+    let minOverlapDepth = Infinity
 
     const { contactPoint: pointA } = this._pointInLineSegment(
       bodyA.startPoint,
       bodyA.endPoint,
       bodyB.position
-    );
+    )
     const { contactPoint: pointB } = this._pointInLineSegment(
       bodyB.startPoint,
       bodyB.endPoint,
       bodyA.position
-    );
+    )
+    const direction = Vec2.subtract(pointB, pointA)
 
-    const axis0 = Vector2.subtract(pointB, pointA).normalize();
-    const axis1 = Vector2.subtract(bodyA.startPoint, bodyA.endPoint)
-      .perp()
-      .normalize();
-    const axis2 = Vector2.subtract(bodyB.startPoint, bodyB.endPoint)
-      .perp()
-      .normalize();
+    const axes = [
+      direction.normalize(),
+      Vec2.subtract(bodyA.startPoint, bodyA.endPoint).perp().normalize(),
+      Vec2.subtract(bodyB.startPoint, bodyB.endPoint).perp().normalize()
+    ]
 
-    for (const axis of [axis0, axis1, axis2]) {
+    for (const axis of axes) {
       const projA = this._projectPoints(
         [bodyA.startPoint, bodyA.endPoint],
         bodyA.radius,
         axis
-      );
+      )
       const projB = this._projectPoints(
         [bodyB.startPoint, bodyB.endPoint],
         bodyB.radius,
         axis
-      );
+      )
 
       if (projA.min > projB.max || projB.min > projA.max) {
         return {
           collision: false,
           normal: null,
-          overlapDepth: 0
-        };
+          overlapDepth: 0,
+          contactPoints: null
+        }
       }
 
       const axisOverlapDepth = Math.min(
         projA.max - projB.min,
         projB.max - projA.min
-      );
+      )
 
       if (axisOverlapDepth < minOverlapDepth) {
-        minOverlapDepth = axisOverlapDepth;
-        normal.copy(axis);
+        minOverlapDepth = axisOverlapDepth
+        normal.copy(axis)
       }
 
-      if (axis0.dot(normal) < 0) normal.negate();
+      if (direction.dot(normal) < 0) normal.negate()
+    }
+
+    // Supporting points
+    const contactPoint1 = new Vec2()
+    const contactPoint2 = new Vec2()
+    let contactCounts = 0
+    let minDistanceSq = Infinity
+
+    const findContactPoint = (points, vertices, radius) => {
+      points.forEach(point => {
+        const currPoint = vertices[0]
+        const nextPoint = vertices[1]
+
+        const { contactPoint, distanceSq } = this._pointInLineSegment(
+          currPoint,
+          nextPoint,
+          point
+        )
+
+        if (Math.abs(distanceSq - minDistanceSq) <= 5e-4) {
+          if (
+            !contactPoint.equal(contactPoint1) &&
+            !contactPoint.equal(contactPoint2)
+          ) {
+            minDistanceSq = distanceSq
+            contactPoint2.copy(contactPoint.add(Vec2.scale(normal, radius)))
+            contactCounts = 2
+          }
+        } else if (distanceSq < minDistanceSq) {
+          minDistanceSq = distanceSq
+          contactPoint1.copy(contactPoint.add(Vec2.scale(normal, radius)))
+          contactCounts = 1
+        }
+      })
+    }
+
+    const verticesA = [bodyA.startPoint, bodyA.endPoint]
+    const verticesB = [bodyB.startPoint, bodyB.endPoint]
+
+    findContactPoint(verticesA, verticesB, -bodyB.radius)
+    findContactPoint(verticesB, verticesA, bodyA.radius)
+
+    const contactPoints = []
+
+    if (contactCounts == 1) {
+      contactPoints.push(contactPoint1)
+    } else if (contactCounts == 2) {
+      contactPoints.push(contactPoint1, contactPoint2)
     }
 
     return {
       collision: true,
       normal,
-      overlapDepth: minOverlapDepth * 0.5
-    };
-  }
-
-  static supportsPillToPill(bodyA, bodyB, normal) {
-    const contactPoint1 = new Vector2(Infinity, Infinity);
-    const contactPoint2 = new Vector2(Infinity, Infinity);
-    let contactCounts = 0;
-    let minDistanceSq = Infinity;
-
-    const findContactPoint = (points, vertices) => {
-      for (let i = 0; i < points.length; i++) {
-        const targetPoint = points[i];
-
-        for (let j = 0; j < vertices.length; j++) {
-          const startPoint = vertices[j];
-          const endPoint = vertices[(j + 1) % vertices.length];
-
-          const { contactPoint, distanceSq } = this._pointInLineSegment(
-            startPoint,
-            endPoint,
-            targetPoint
-          );
-
-          if (Math.abs(distanceSq - minDistanceSq) <= 5e-4) {
-            if (
-              !contactPoint.equal(contactPoint1) &&
-              !contactPoint.equal(contactPoint2)
-            ) {
-              minDistanceSq = distanceSq;
-              contactPoint2.copy(contactPoint);
-              contactCounts = 2;
-            }
-          } else if (distanceSq < minDistanceSq) {
-            minDistanceSq = distanceSq;
-            contactPoint1.copy(contactPoint);
-            contactCounts = 1;
-          }
-        }
-      }
-    };
-
-    const verticesA = [bodyA.startPoint, bodyA.endPoint];
-    const verticesB = [bodyB.startPoint, bodyB.endPoint];
-
-    findContactPoint(verticesA, verticesB);
-    findContactPoint(verticesB, verticesA);
-
-    const { contactPoint: pointA } = this._pointInLineSegment(
-      bodyA.startPoint,
-      bodyA.endPoint,
-      bodyB.position
-    );
-
-    if (contactCounts === 1) {
-      return [contactPoint1, pointA];
-    } else if (contactCounts === 2) {
-      return [contactPoint1, contactPoint2, pointA];
+      overlapDepth: minOverlapDepth,
+      contactPoints,
+      edgeA: pointA,
+      edgeB: pointB
     }
   }
 
@@ -528,41 +526,37 @@ export class Collision {
       bodyB.startPoint,
       bodyB.endPoint,
       bodyA.position
-    );
+    )
 
-    const direction = Vector2.subtract(pointB, bodyA.position);
-    const distanceSq = direction.magnitudeSq();
-    const radii = bodyA.radius + bodyB.radius;
+    const direction = Vec2.subtract(pointB, bodyA.position)
+    const distanceSq = direction.magnitudeSq()
+    const radii = bodyA.radius + bodyB.radius
 
-    if (distanceSq === 0 || distanceSq >= radii * radii) {
+    if (distanceSq == 0 || distanceSq >= radii * radii) {
       return {
         collision: false,
         normal: null,
-        overlapDepth: 0
-      };
+        overlapDepth: 0,
+        contactPoints: null
+      }
     }
 
-    const distance = Math.sqrt(distanceSq);
-    const normal = direction.scale(1 / distance);
-    const overlapDepth = (radii - distance) * 0.5;
+    const distance = Math.sqrt(distanceSq)
+    const normal = direction.scale(1 / distance)
+    const overlapDepth = radii - distance
+
+    const contactPoint = Vec2.add(
+      bodyA.position,
+      Vec2.scale(normal, bodyA.radius)
+    )
 
     return {
       collision: true,
       normal,
-      overlapDepth
-    };
-  }
-
-  static supportsCircleToPill(bodyA, normal) {
-    const contactPoint1 = Vector2.add(
-      bodyA.position,
-      Vector2.scale(normal, bodyA.radius)
-    ).add(normal.perp(), -2);
-    const contactPoint2 = Vector2.add(
-      bodyA.position,
-      Vector2.scale(normal, bodyA.radius)
-    ).add(normal.perp(), 2);
-
-    return [contactPoint1, contactPoint2];
+      overlapDepth,
+      contactPoints: [contactPoint],
+      edgeA: true,
+      edgeB: pointB
+    }
   }
 }

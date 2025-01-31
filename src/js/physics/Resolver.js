@@ -1,121 +1,130 @@
-import { Vector2 } from './Vector2.js';
+import { Vec2 } from './Vec2.js'
 
 export class Resolver {
-  static separatesBodies(bodyA, bodyB, normal, overlapDepth) {
+  static resolveCollision(bodyA, bodyB, normal, overlapDepth, contactPoints) {
+    // Separate Bodies
     if (bodyA.isStatic && !bodyB.isStatic) {
-      bodyB.position.add(normal, overlapDepth * 2);
+      bodyB.position.add(normal, overlapDepth)
     } else if (!bodyA.isStatic && bodyB.isStatic) {
-      bodyA.position.add(normal, -overlapDepth * 2);
+      bodyA.position.add(normal, -overlapDepth)
     } else if (!bodyA.isStatic && !bodyB.isStatic) {
-      bodyA.position.add(normal, -overlapDepth);
-      bodyB.position.add(normal, overlapDepth);
+      bodyA.position.add(normal, -overlapDepth * 0.5)
+      bodyB.position.add(normal, overlapDepth * 0.5)
+    } else {
+      return null
     }
-  }
 
-  static resolveCollision(bodyA, bodyB, normal, contactPoints) {
-    let raList = [];
-    let rbList = [];
-    let tangents = [new Vector2(), new Vector2(), new Vector2()];
-    let impulses = [0, 0, 0];
-    let frictionImpulses = [0, 0, 0];
-    let restitution = Math.min(bodyA.restitution, bodyB.restitution);
-    const friction = {
-      static: (bodyA.friction.static + bodyB.friction.static) * 0.5,
-      dynamic: (bodyA.friction.dynamic + bodyB.friction.dynamic) * 0.5
-    };
-    const m1 = bodyA.inverseMass;
-    const m2 = bodyB.inverseMass;
-    const I1 = bodyA.inverseInertia;
-    const I2 = bodyB.inverseInertia;
+    const n = contactPoints.length
+    let leverArmsA = []
+    let leverArmsB = []
+    let tangents = Array.from({ length: n }, () => new Vec2())
+    let normalImpulses = Array.from({ length: n }, () => 0)
+    let tangentImpulses = Array.from({ length: n }, () => 0)
 
-    const dampFactor = 0.9999;
-    const torqueFactor = 0.6;
+    let restitution = 1 + Math.min(bodyA.restitution, bodyB.restitution)
+    const staticFriction = Math.min(
+      bodyA.friction.static,
+      bodyB.friction.static
+    )
+    const kineticFriction = Math.min(
+      bodyA.friction.kinetic,
+      bodyB.friction.kinetic
+    )
 
-    for (let i = 0; i < contactPoints.length; i++) {
-      const ra = Vector2.subtract(contactPoints[i], bodyA.position);
-      const rb = Vector2.subtract(contactPoints[i], bodyB.position);
+    const inverseMassA = bodyA.inverseMass
+    const inverseMassB = bodyB.inverseMass
+    const inverseInertiaA = bodyA.inverseInertia
+    const inverseInertiaB = bodyB.inverseInertia
 
-      raList[i] = ra;
-      rbList[i] = rb;
+    const dampFactor = 0.9999
+    const torqueFactorA = bodyA.label == 'circle' ? 0.9 : 0.6
+    const torqueFactorB = bodyB.label == 'circle' ? 0.9 : 0.6
 
-      const raPerp = ra.perp();
-      const rbPerp = rb.perp();
+    for (let i = 0; i < n; ++i) {
+      const armA = Vec2.subtract(contactPoints[i], bodyA.position)
+      const armB = Vec2.subtract(contactPoints[i], bodyB.position)
 
-      const angularVelocityA = Vector2.scale(raPerp, bodyA.angularVelocity);
-      const angularVelocityB = Vector2.scale(rbPerp, bodyB.angularVelocity);
-      const relativeVelocity = Vector2.subtract(
-        Vector2.add(bodyB.velocity, angularVelocityB),
-        Vector2.add(bodyA.velocity, angularVelocityA)
-      );
+      leverArmsA[i] = armA
+      leverArmsB[i] = armB
 
-      const velocityAlongNormal = relativeVelocity.dot(normal);
+      const armAPerp = armA.perp()
+      const armBPerp = armB.perp()
+      const angularVelocityA = Vec2.scale(armAPerp, bodyA.angularVelocity)
+      const angularVelocityB = Vec2.scale(armBPerp, bodyB.angularVelocity)
 
-      if (velocityAlongNormal > 0) {
-        continue;
-      }
+      const relativeVelocity = Vec2.subtract(
+        Vec2.add(bodyB.velocity, angularVelocityB),
+        Vec2.add(bodyA.velocity, angularVelocityA)
+      )
+      const velocityAlongNormal = relativeVelocity.dot(normal)
 
-      const tangent = Vector2.subtract(
+      if (velocityAlongNormal > 0) continue
+
+      const tangent = Vec2.subtract(
         relativeVelocity,
-        Vector2.scale(normal, velocityAlongNormal)
-      );
+        Vec2.scale(normal, velocityAlongNormal)
+      )
 
-      tangents[i] = tangent;
+      tangents[i] = tangent
 
-      if (tangent.equal(new Vector2())) {
-        tangent.zero();
-      } else {
-        tangent.normalize();
-      }
+      tangent.equal(new Vec2()) ? tangent.zero() : tangent.normalize()
 
-      const raPerpAlongNormal = raPerp.dot(normal);
-      const rbPerpAlongNormal = rbPerp.dot(normal);
-      const raPerpAlongTangent = raPerp.dot(tangent);
-      const rbPerpAlongTangent = rbPerp.dot(tangent);
+      const armAPerpAlongNormal = armAPerp.dot(normal)
+      const armBPerpAlongNormal = armBPerp.dot(normal)
+      const armAPerpAlongTangent = armAPerp.dot(tangent)
+      const armBPerpAlongTangent = armBPerp.dot(tangent)
 
-      const denom =
-        m1 + m2 + raPerpAlongNormal ** 2 * I1 + rbPerpAlongNormal ** 2 * I2;
+      const normalDenom =
+        inverseMassA +
+        inverseMassB +
+        armAPerpAlongNormal ** 2 * inverseInertiaA +
+        armBPerpAlongNormal ** 2 * inverseInertiaB
+      const tangentDenom =
+        inverseMassA +
+        inverseMassB +
+        armAPerpAlongTangent ** 2 * inverseInertiaA +
+        armBPerpAlongTangent ** 2 * inverseInertiaB
 
-      const impulse = (-(1 + restitution) * velocityAlongNormal) / denom;
-      let frictionImpulse = -relativeVelocity.dot(tangent) / denom;
+      let normalImpulse = (-restitution * velocityAlongNormal) / normalDenom
+      let tangentImpulse = -relativeVelocity.dot(tangent) / tangentDenom
 
-      if (Math.abs(frictionImpulse) > impulse * friction.static) {
-        frictionImpulse = -impulse * friction.dynamic;
-      }
+      // Coulomb's law
+      if (Math.abs(tangentImpulse) > normalImpulse * staticFriction)
+        tangentImpulse = -normalImpulse * kineticFriction
 
-      impulses[i] = impulse / contactPoints.length;
-      frictionImpulses[i] = frictionImpulse / contactPoints.length;
+      normalImpulses[i] = normalImpulse / n
+      tangentImpulses[i] = tangentImpulse / n
     }
 
-    for (let i = 0; i < contactPoints.length; i++) {
-      const ra = raList[i];
-      const rb = rbList[i];
-      const tangent = tangents[i];
-      const impulse = impulses[i];
-      const frictionImpulse = frictionImpulses[i];
+    for (let i = 0; i < n; ++i) {
+      const armA = leverArmsA[i]
+      const armB = leverArmsB[i]
+      const tangent = tangents[i]
+      const normalImpulse = normalImpulses[i]
+      const tangentImpulse = tangentImpulses[i]
 
-      const impulseTorqueA = ra.cross(Vector2.scale(normal, -impulse));
-      const impulseTorqueB = rb.cross(Vector2.scale(normal, impulse));
-      const frictionTorqueA = ra.cross(
-        Vector2.scale(tangent, -frictionImpulse)
-      );
-      const frictionTorqueB = rb.cross(Vector2.scale(tangent, frictionImpulse));
+      const normalTorqueA = armA.cross(Vec2.scale(normal, -normalImpulse))
+      const normalTorqueB = armB.cross(Vec2.scale(normal, normalImpulse))
+      const tangentTorqueA = armA.cross(Vec2.scale(tangent, -tangentImpulse))
+      const tangentTorqueB = armB.cross(Vec2.scale(tangent, tangentImpulse))
 
       // Apply damping
-      bodyA.velocity.scale(dampFactor);
-      bodyB.velocity.scale(dampFactor);
+      bodyA.angularVelocity *= dampFactor
+      bodyB.angularVelocity *= dampFactor
+      bodyA.velocity.scale(dampFactor)
+      bodyB.velocity.scale(dampFactor)
 
-      // Correct Velocity And Rotation
-      bodyA.velocity.add(normal, -impulse * m1);
-      bodyB.velocity.add(normal, impulse * m2);
+      // Apply Angular Velocity Correction
+      bodyA.angularVelocity += normalTorqueA * inverseInertiaA * torqueFactorA
+      bodyB.angularVelocity += normalTorqueB * inverseInertiaB * torqueFactorB
+      bodyA.angularVelocity += tangentTorqueA * inverseInertiaA * torqueFactorA
+      bodyB.angularVelocity += tangentTorqueB * inverseInertiaB * torqueFactorB
 
-      bodyA.angularVelocity += impulseTorqueA * I1 * torqueFactor;
-      bodyB.angularVelocity += impulseTorqueB * I2 * torqueFactor;
-
-      bodyA.velocity.add(tangent, -frictionImpulse * m1);
-      bodyB.velocity.add(tangent, frictionImpulse * m2);
-
-      bodyA.angularVelocity += frictionTorqueA * I1 * torqueFactor;
-      bodyB.angularVelocity += frictionTorqueB * I2 * torqueFactor;
+      // Apply Linear Velocity Correction
+      bodyA.velocity.add(normal, -normalImpulse * inverseMassA)
+      bodyB.velocity.add(normal, normalImpulse * inverseMassB)
+      bodyA.velocity.add(tangent, -tangentImpulse * inverseMassA)
+      bodyB.velocity.add(tangent, tangentImpulse * inverseMassB)
     }
   }
 }
