@@ -10,9 +10,9 @@ export class Vec2 {
     return this
   }
 
-  copy(vector, scalar = 1) {
-    this.x = vector.x * scalar
-    this.y = vector.y * scalar
+  copy(v, s = 1) {
+    this.x = v.x * s
+    this.y = v.y * s
     return this
   }
 
@@ -38,23 +38,19 @@ export class Vec2 {
     return this
   }
 
-  perp() {
-    return new Vec2(-this.y, this.x)
+  perp(signed = 1) {
+    return new Vec2(-this.y * signed, this.x * signed)
   }
 
   rotate(angle) {
     const cos = Math.cos(angle)
     const sin = Math.sin(angle)
 
-    const x = this.x * cos - this.y * sin
-    const y = this.x * sin + this.y * cos
-
-    return new Vec2(x, y)
+    return new Vec2(this.x * cos - this.y * sin, this.x * sin + this.y * cos)
   }
 
-  equal(vector) {
-    const minDistance = 5e-4
-    return Vec2.distanceSq(this, vector) <= minDistance * minDistance
+  equal(v) {
+    return Vec2.distanceSq(this, v) < 2.5e-7
   }
 
   string() {
@@ -63,45 +59,44 @@ export class Vec2 {
 
   log() {
     console.log(this.string())
+  }
+
+  add(v, s = 1) {
+    this.x += v.x * s
+    this.y += v.y * s
     return this
   }
 
-  add(vector, scalar = 1) {
-    this.x += vector.x * scalar
-    this.y += vector.y * scalar
+  subtract(v, s = 1) {
+    this.x -= v.x * s
+    this.y -= v.y * s
     return this
   }
 
-  subtract(vector, scalar = 1) {
-    this.x -= vector.x * scalar
-    this.y -= vector.y * scalar
+  divide(v, s = 1) {
+    this.x /= v.x * s
+    this.y /= v.y * s
     return this
   }
 
-  divide(vector, scalar = 1) {
-    this.x /= vector.x * scalar
-    this.y /= vector.y * scalar
+  multiply(v, s = 1) {
+    this.x *= v.x * s
+    this.y *= v.y * s
     return this
   }
 
-  multiply(vector, scalar = 1) {
-    this.x *= vector.x * scalar
-    this.y *= vector.y * scalar
+  scale(s = 1) {
+    this.x *= s
+    this.y *= s
     return this
   }
 
-  scale(scalar = 1) {
-    this.x *= scalar
-    this.y *= scalar
-    return this
+  dot(v) {
+    return this.x * v.x + this.y * v.y
   }
 
-  dot(vector) {
-    return this.x * vector.x + this.y * vector.y
-  }
-
-  cross(vector) {
-    return this.x * vector.y - this.y * vector.x
+  cross(v) {
+    return this.x * v.y - this.y * v.x
   }
 
   magnitude() {
@@ -115,14 +110,10 @@ export class Vec2 {
   normalize(length = 0) {
     length = length ? length : this.magnitude()
 
-    if (length === 0) {
-      return this.zero()
-    } else {
-      return this.scale(1 / length)
-    }
+    if (length === 0) return this.zero()
+    else return this.scale(1 / length)
   }
 
-  // Static Method To Avoid Mutation
   static add(v1, v2) {
     return new Vec2(v1.x + v2.x, v1.y + v2.y)
   }
@@ -131,43 +122,42 @@ export class Vec2 {
     return new Vec2(v1.x - v2.x, v1.y - v2.y)
   }
 
-  static scale(vector, scalar) {
-    return new Vec2(vector.x * scalar, vector.y * scalar)
+  static scale(v, s) {
+    return new Vec2(v.x * s, v.y * s)
   }
 
-  static tripleProduct(v1, v2, v3) {
-    const cross = v1.cross(v2)
+  static vectorTripleProduct(v1, v2, v3) {
+    return Vec2.subtract(Vec2.scale(v2, v1.dot(v3)), Vec2.scale(v1, v3.dot(v2)))
+  }
 
-    return new Vec2(-cross * v3.y, cross * v3.x)
+  static cross3(v1, v2, v3) {
+    return (v2.x - v1.x) * (v3.y - v1.y) - (v2.y - v1.y) * (v3.x - v1.x)
   }
 
   static distance(v1, v2) {
     const dir = Vec2.subtract(v1, v2)
 
-    return Math.sqrt(dir.x * dir.x + dir.y * dir.y)
+    return Math.sqrt(dir.x ** 2 + dir.y ** 2)
   }
 
   static distanceSq(v1, v2) {
     const dir = Vec2.subtract(v1, v2)
 
-    return dir.x * dir.x + dir.y * dir.y
+    return dir.x ** 2 + dir.y ** 2
   }
 
-  static normalized(vector, length = 0) {
+  static normalized(v, length = 0) {
     length = length ? length : vector.magnitude()
 
-    if (length === 0) {
-      return new Vec2()
-    } else {
-      return Vec2.scale(vector, 1 / length)
-    }
+    if (length === 0) return new Vec2()
+    else return Vec2.scale(v, 1 / length)
   }
 
-  static perp(vector) {
-    return new Vec2(-vector.y, vector.x)
+  static perp(v) {
+    return new Vec2(-v.y, v.x)
   }
 
-  static negate(vector) {
-    return new Vec2(-vector.x, -vector.y)
+  static negate(v) {
+    return new Vec2(-v.x, -v.y)
   }
 }

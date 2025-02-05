@@ -1,6 +1,6 @@
 import { Vec2 } from './Vec2.js'
 import { SpatialGrid } from './SpatialGrid.js'
-import { Bounds } from './Bounds.js'
+import { Bnd2 } from './Bnd2.js'
 import { Composite } from './Composite.js'
 import { Collision } from './Collision.js'
 import { Resolver } from './Resolver.js'
@@ -8,26 +8,60 @@ import { Resolver } from './Resolver.js'
 export class Engine {
   constructor(option = {}) {
     this.world = []
+
+    if (option.gravity && typeof option.gravity != 'number') {
+      option.gravity = 9.81
+      console.warn(`Engine's gravity must be of type 'number'`)
+    } else if (option.gravity == undefined) option.gravity = 9.81
+
     this.gravity = {
       x: 0,
-      y: option.gravity || (typeof option.gravity !== 'number' && 9.81) || 0
+      y: option.gravity
     }
 
-    if (!option.grid) option.grid = {}
+    option.boundary = option.boundary == undefined ? {} : option.boundary
+
+    if (option.boundary && typeof option.boundary != 'object') {
+      console.warn(
+        `
+          Engine.grid must be of type object!
+          { 
+            x: Number, // Default 0
+            y: Number, // Default 0
+            width: Number, // Default innerWidth
+            height: Number, // Default innerHeight
+            scale: Number, // Default 40
+          }
+        `
+      )
+      option.boundary = {}
+    }
+
     this.grid = new SpatialGrid(
-      option.grid.x || 0,
-      option.grid.y || 0,
-      option.grid.width || innerWidth,
-      option.grid.height || innerHeight,
-      option.grid.scale || 40
+      option.boundary.x || 0,
+      option.boundary.y || 0,
+      option.boundary.width || innerWidth,
+      option.boundary.height || innerHeight,
+      option.boundary.scale || 40
     )
-    this.subSteps = option.subSteps || 4
     this.wireframe =
       option.wireframe == undefined
         ? true
-        : typeof option.wireframe != 'boolean'
+        : option.wireframe && typeof option.wireframe != 'boolean'
         ? true
         : option.wireframe
+    this.subSteps =
+      option.subSteps == undefined
+        ? 4
+        : option.subSteps && typeof option.subSteps != 'number'
+        ? 4
+        : option.subSteps
+    this.removeOffBound =
+      option.removeOffBound == undefined
+        ? false
+        : option.removeOffBound && typeof option.removeOffBound != 'boolean'
+        ? false
+        : option.removeOffBound
   }
 
   renderGrid(ctx) {
@@ -37,25 +71,22 @@ export class Engine {
   renderBounds(ctx) {
     ctx.strokeStyle = '#e08728'
     this.world.forEach(body => {
-      const { min, width, height } = Bounds.getBound(body)
+      const { min, width, height } = Bnd2.getBound(body)
 
       ctx.strokeRect(min.x, min.y, width, height)
     })
   }
 
-  removeOffBound(boundX, boundY, boundW, boundH) {
-    this.world.forEach(body => {
-      const { min, max, width, height } = body.getBound()
+  removeOffBound(body, boundX, boundY, boundW, boundH) {
+    const { min, max, width, height } = Bnd2.getBound(body)
 
-      if (
-        min.x < boundX - width ||
-        min.y < boundY - height ||
-        max.x > boundW + width ||
-        max.y > boundH + height
-      ) {
-        Composite.remove(this, body)
-      }
-    })
+    if (
+      min.x < boundX - width ||
+      min.y < boundY - height ||
+      max.x > boundW + width ||
+      max.y > boundH + height
+    )
+      Composite.remove(this, body)
   }
 
   run(deltaTime = 1000 / 60, ctx = null) {
@@ -64,7 +95,7 @@ export class Engine {
     for (let subStep = 1; subStep <= this.subSteps; ++subStep) {
       for (let i = 0; i < this.world.length; ++i) {
         const bodyA = this.world[i]
-        let boundA = bodyA.getBound()
+        let boundA = Bnd2.getBound(bodyA)
         const acceleration = Vec2.scale(this.gravity, bodyA.inverseMass)
 
         bodyA.velocity.add(acceleration, deltaTime)
@@ -73,63 +104,66 @@ export class Engine {
 
         if (bodyA.rotation) bodyA.rotate(bodyA.angularVelocity * deltaTime)
 
-        if (subStep == this.subSteps) {
+        if (subStep == 1) {
+          const color = this.wireframe ? '#fdaa4a' : '#ffffffc0'
+          ctx && this._drawVelocity(ctx, bodyA, color)
           this.grid.updateData(bodyA)
 
           if (
-            boundA.min.x < this.grid.bounds[0][0] - boundA.width ||
-            boundA.min.y < this.grid.bounds[0][1] - boundA.height ||
-            boundA.max.x > this.grid.bounds[1][0] + boundA.width ||
-            boundA.max.y > this.grid.bounds[1][1] + boundA.height
+            boundA.min.x < this.grid.bound[0] - boundA.width ||
+            boundA.min.y < this.grid.bound[1] - boundA.height ||
+            boundA.max.x > this.grid.bound[2] + boundA.width ||
+            boundA.max.y > this.grid.bound[3] + boundA.height
           ) {
             this.grid.removeData(bodyA)
+
+            if (this.removeOffBound) {
+              const last = this.world.length - 1
+
+              this.world[i] = this.world[last]
+              this.world[last] = bodyA
+              this.world.pop()
+
+              continue
+            }
           }
         }
 
         const nearby = this.grid.queryNearby(bodyA)
 
         for (const bodyB of nearby) {
-          boundA = bodyA.getBound()
-          const boundB = bodyB.getBound()
+          boundA = Bnd2.getBound(bodyA)
+          const boundB = Bnd2.getBound(bodyB)
 
-          if (!Bounds.overlaps(boundA, boundB)) {
-            continue
-          } else {
+          if (!Bnd2.overlaps(boundA, boundB)) continue
+          else {
             const manifold = this._detectCollision(bodyA, bodyB)
 
             if (manifold) {
               if (subStep == 1 && ctx) {
-                const color = this.wireframe ? 'orange' : '#ffffffc0'
+                const color = this.wireframe ? '#eb3f3f' : '#ffffffc0'
 
                 ctx.strokeStyle = color
-                if (bodyA.label == 'rectangle' || bodyA.label == 'polygon') {
-                  this._drawEdge(ctx, manifold.edgeA)
-                } else if (bodyA.label == 'circle') {
-                  this._drawArcEdge(ctx, bodyA, manifold.contactPoints[0])
-                } else if (bodyA.label == 'pill') {
-                  this._drawPillEdge(
-                    ctx,
-                    bodyA,
-                    manifold.edgeA,
-                    manifold.contactPoints[0]
-                  )
+                switch (bodyA.label) {
+                  case 'rectangle':
+                  case 'polygon':
+                    this._drawEdge(ctx, manifold.edgeA)
+                    break
+
+                  case 'circle':
+                    this._drawArcEdge(ctx, bodyA, manifold.contactPoints[0])
+                    break
+
+                  case 'pill':
+                    this._drawPillEdge(
+                      ctx,
+                      bodyA,
+                      manifold.edgeA,
+                      manifold.contactPoints[0]
+                    )
+                    break
                 }
 
-                if (bodyB.label == 'rectangle' || bodyB.label == 'polygon') {
-                  this._drawEdge(ctx, manifold.edgeB)
-                } else if (bodyB.label == 'circle') {
-                  this._drawArcEdge(ctx, bodyB, manifold.contactPoints[0])
-                } else if (bodyB.label == 'pill') {
-                  this._drawPillEdge(
-                    ctx,
-                    bodyB,
-                    manifold.edgeB,
-                    manifold.contactPoints[0]
-                  )
-                }
-
-                this._drawAxis(ctx, bodyA, manifold.normal, color)
-                this._drawAxis(ctx, bodyB, manifold.normal, color)
                 this._drawContacts(ctx, manifold.contactPoints, color)
               }
 
@@ -147,27 +181,6 @@ export class Engine {
     }
   }
 
-  _getCollisionType(labelA, labelB) {
-    if (labelA == 'circle' && labelB == 'circle') return 'circle-circle'
-
-    if (labelA == 'circle' && (labelB == 'rectangle' || labelB == 'polygon'))
-      return 'circle-rectangle-polygon'
-
-    if (
-      (labelA == 'rectangle' || labelA == 'polygon') &&
-      (labelB == 'rectangle' || labelB == 'polygon')
-    )
-      return 'rectangle-polygon'
-
-    if ((labelA == 'rectangle' || labelA == 'polygon') && labelB == 'pill')
-      return 'polygon-pill'
-
-    if (labelA == 'circle' && labelB == 'pill') return 'circle-pill'
-
-    if (labelA == 'pill' && labelB == 'pill') return 'pill-pill'
-    return 'unknown'
-  }
-
   _drawContacts(ctx, contactPoints, color) {
     const radius = 2
 
@@ -175,8 +188,9 @@ export class Engine {
       ctx.beginPath()
       ctx.arc(point.x, point.y, radius, 0, Math.PI * 2)
     }
+
     if (this.wireframe) {
-      ctx.fillStyle = color
+      ctx.fillStyle = '#eb3f3f'
       ctx.fill()
     } else {
       ctx.fillStyle = 'red'
@@ -186,16 +200,9 @@ export class Engine {
     }
   }
 
-  _drawAxis(ctx, body, axis, color) {
-    const length =
-      body.width < body.height
-        ? body.width * 0.25
-        : body.height < body.width
-        ? body.height * 0.25
-        : body.radius
-        ? body.radius * 0.5
-        : 10
-    const end = Vec2.add(body.position, Vec2.scale(axis, length))
+  _drawVelocity(ctx, body, color) {
+    const length = 100
+    const end = Vec2.add(body.position, Vec2.scale(body.velocity, length))
 
     ctx.beginPath()
     ctx.moveTo(body.position.x, body.position.y)
@@ -236,11 +243,9 @@ export class Engine {
       const cross = toContact.cross(toEnd)
       let edge = null
 
-      if (cross > 0) {
-        edge = [body.vertices[1], body.vertices[2]]
-      } else {
-        edge = [body.vertices[0], body.vertices[3]]
-      }
+      cross > 0
+        ? (edge = [body.vertices[1], body.vertices[2]])
+        : (edge = [body.vertices[0], body.vertices[3]])
 
       ctx.beginPath()
       ctx.moveTo(edge[0].x, edge[0].y)
@@ -250,50 +255,54 @@ export class Engine {
       return null
     }
 
+    const startDir = Vec2.subtract(body.vertices[0], body.startPoint)
+    const endDir = Vec2.subtract(body.vertices[1], body.startPoint)
+    const startAngle = Math.atan2(startDir.y, startDir.x)
+    const endAngle = Math.atan2(endDir.y, endDir.x)
+
+    ctx.beginPath()
     if (
       Vec2.distanceSq(contactPoint, body.startPoint) <
       Vec2.distanceSq(contactPoint, body.endPoint)
-    ) {
-      const startDirP1 = Vec2.subtract(body.vertices[0], body.startPoint)
-      const endDirP1 = Vec2.subtract(body.vertices[1], body.startPoint)
-      const startAngleP1 = Math.atan2(startDirP1.y, startDirP1.x)
-      const endAngleP1 = Math.atan2(endDirP1.y, endDirP1.x)
-
-      // const direction = Vec2.subtract(contactPoint, body.startPoint);
-      // const angle = Math.atan2(direction.y, direction.x);
-
-      ctx.beginPath()
+    )
       ctx.arc(
         body.startPoint.x,
         body.startPoint.y,
         body.radius,
-        startAngleP1,
-        endAngleP1
-        // Math.max(angle - Math.PI * 0.25, startAngleP1),
-        // Math.min(angle + Math.PI * 0.25, endAngleP1)
+        startAngle,
+        endAngle
       )
-      ctx.stroke()
-    } else {
-      const startDirP2 = Vec2.subtract(body.vertices[2], body.endPoint)
-      const endDirP2 = Vec2.subtract(body.vertices[3], body.endPoint)
-      const startAngleP2 = Math.atan2(startDirP2.y, startDirP2.x)
-      const endAngleP2 = Math.atan2(endDirP2.y, endDirP2.x)
-
-      // const direction = Vec2.subtract(contactPoint, body.endPoint);
-      // const angle = Math.atan2(direction.y, direction.x);
-
-      ctx.beginPath()
+    else
       ctx.arc(
         body.endPoint.x,
         body.endPoint.y,
         body.radius,
-        startAngleP2,
-        endAngleP2
-        // Math.max(angle - Math.PI * 0.25, startAngleP2),
-        // Math.min(angle + Math.PI * 0.25, endAngleP2)
+        endAngle,
+        startAngle
       )
-      ctx.stroke()
-    }
+    ctx.stroke()
+  }
+
+  _getCollisionType(labelA, labelB) {
+    if (labelA == 'circle' && labelB == 'circle') return 'circle-circle'
+
+    if (labelA == 'circle' && (labelB == 'rectangle' || labelB == 'polygon'))
+      return 'circle-rectangle-polygon'
+
+    if (
+      (labelA == 'rectangle' || labelA == 'polygon') &&
+      (labelB == 'rectangle' || labelB == 'polygon')
+    )
+      return 'rectangle-polygon'
+
+    if ((labelA == 'rectangle' || labelA == 'polygon') && labelB == 'pill')
+      return 'polygon-pill'
+
+    if (labelA == 'circle' && labelB == 'pill') return 'circle-pill'
+
+    if (labelA == 'pill' && labelB == 'pill') return 'pill-pill'
+
+    return 'unknown'
   }
 
   _detectCollision(bodyA, bodyB) {
@@ -340,6 +349,7 @@ export class Engine {
           manifold = { normal, overlapDepth, contactPoints, edgeA, edgeB }
         break
       }
+
       case 'pill-pill': {
         const { collision, normal, overlapDepth, contactPoints, edgeA, edgeB } =
           Collision.detectPillToPill(bodyA, bodyB)

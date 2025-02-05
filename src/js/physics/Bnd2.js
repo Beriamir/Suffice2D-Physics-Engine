@@ -1,6 +1,6 @@
 import { Vec2 } from './Vec2.js'
 
-export class Bounds {
+export class Bnd2 {
   static getBound(body) {
     const min = new Vec2(Infinity, Infinity)
     const max = new Vec2(-Infinity, -Infinity)

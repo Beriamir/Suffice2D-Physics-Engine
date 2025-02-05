@@ -1,18 +1,22 @@
-import { Vec2, Composite, Engine, Bodies } from './physics/index.js'
+import * as Physics from './physics/index.js'
 
 onload = function main() {
-  const canvas = document.getElementById('canvas')
+  const Vec2 = Physics.Vec2
+  const Engine = Physics.Engine
+  const Composite = Physics.Composite
+  const Bodies = Physics.Bodies
 
+  const canvas = document.getElementById('canvas')
   const ctx = canvas.getContext('2d')
   let canvasWidth = innerWidth
   let canvasHeight = innerHeight
-  const pixelRatio = devicePixelRatio || 1
+  const pixelRatio = 1 || devicePixelRatio || 1
   const targetFPS = 60
   const timeInterval = 1000 / targetFPS
   let timeAccumulator = 0
   const mouse = { x: canvasWidth / 2, y: canvasHeight / 2 }
 
-  const minSize = 30
+  const minSize = 35
   const maxSize = 40
   let wireframe = true
   const restitution = 0.9
@@ -21,13 +25,14 @@ onload = function main() {
     wireframe,
     subSteps,
     gravity: 9.81,
-    grid: {
+    boundary: {
       x: 0,
       y: 0,
       width: canvasWidth,
       height: canvasHeight,
       scale: canvasWidth > canvasHeight ? maxSize * 2 : maxSize
-    }
+    },
+    removeOffBound: true
   })
 
   // Set canvas resolution
@@ -75,7 +80,7 @@ onload = function main() {
     throttle(event => {
       event.preventDefault()
       handleMouseMove(event.offsetX, event.offsetY)
-    }, 1000 / 30)
+    }, 5000)
   )
 
   function handleMouseDown(eventX, eventY) {
@@ -89,7 +94,7 @@ onload = function main() {
       wireframe,
       restitution
     }
-    const body = new Bodies.rectangle(x, y, randomSize, randomSize, option)
+    const body = new Bodies.rectangle(x, y, maxSize, maxSize, option)
 
     Composite.add(engine, body)
   }
@@ -103,10 +108,14 @@ onload = function main() {
     const x = clamp(mouse.x, randomSize, canvasWidth - randomSize)
     const y = clamp(mouse.y, randomSize, canvasHeight - randomSize)
     const vertices = []
-    const edgeCount = Math.floor(Math.random() * (8 - 5) + 5)
+    const edgeCount = Math.floor(Math.random() * (16 - 3) + 3)
     for (let i = 0; i < edgeCount; i++) {
       const angle = (i * Math.PI * 2) / edgeCount
-      const radius = Math.random() * (minSize - 10) + (maxSize - 10)
+
+      const radius =
+        edgeCount <= 8
+          ? Math.random() * (minSize - 10) + (maxSize - 10)
+          : randomSize
 
       vertices.push({
         x: x + radius * 0.7 * Math.cos(angle),
@@ -132,6 +141,8 @@ onload = function main() {
     Composite.add(engine, body)
   }
 
+  let rotatingObstacle1 = null
+
   function init() {
     // Create static bodies
     const ground = new Bodies.rectangle(
@@ -146,11 +157,11 @@ onload = function main() {
         color: '#8a8a8a'
       }
     )
-    const rotatingObstacle1 = new Bodies.pill(
+    rotatingObstacle1 = new Bodies.pill(
       canvasWidth * 0.2,
       canvasHeight * 0.5,
       20,
-      canvasWidth < canvasHeight ? canvasWidth * 0.4 : canvasHeight * 0.4,
+      canvasWidth < canvasHeight ? canvasWidth * 0.5 : canvasHeight * 0.5,
       {
         isStatic: true,
         wireframe,
@@ -173,25 +184,32 @@ onload = function main() {
 
     rotatingObstacle1.rotate(Math.PI * 0.5)
     bigwall.rotate(50)
+    // bigwall.roundCorner();
 
     Composite.addMany(engine, [ground, rotatingObstacle1, bigwall])
   }
 
   function spawner() {
     let body = null
-    const x = clamp(canvasWidth * 0.8, maxSize, canvasWidth - maxSize)
-    const y = clamp(0, 100, canvasHeight - maxSize)
+    const randomSize = Math.random() * (maxSize - minSize) + minSize
+    const x = clamp(canvasWidth * 0.25, maxSize, canvasWidth - maxSize)
+    const y = clamp(canvasHeight * 0.35, 0, canvasHeight - maxSize)
     const vertices = []
     const edgeCount = Math.floor(Math.random() * (16 - 3) + 3)
 
     for (let i = 0; i < edgeCount; i++) {
       const angle = (i * Math.PI * 2) / edgeCount
+      const radius =
+        edgeCount < 9
+          ? Math.random() * (minSize - 10) + (maxSize - 10)
+          : randomSize
 
       vertices.push({
-        x: x + maxSize * 0.7 * Math.cos(angle),
-        y: y + maxSize * 0.7 * Math.sin(angle)
+        x: x + radius * 0.7 * Math.cos(angle),
+        y: y + radius * 0.7 * Math.sin(angle)
       })
     }
+
     const option = {
       wireframe,
       restitution
@@ -209,20 +227,22 @@ onload = function main() {
 
     Composite.add(engine, body)
 
-    setTimeout(function () {
+    setTimeout(() => {
       spawner()
-    }, 800)
+    }, 100)
   }
 
-  // spawner();
+  // spawner()
 
   function renderSimulation(ctx) {
     const fontSize = 12
     ctx.clearRect(0, 0, canvasWidth, canvasHeight)
     // engine.renderGrid(ctx)
-    // engine.renderBounds(ctx);
 
-    engine.world.forEach(body => body.render(ctx))
+    engine.world.forEach(body => {
+      // body.renderBnd(ctx)
+      body.render(ctx)
+    })
 
     ctx.fillStyle = 'white'
     ctx.font = 'normal 12px Arial'
@@ -245,7 +265,7 @@ onload = function main() {
 
       renderSimulation(ctx)
       engine.run(update.deltaTime, ctx)
-      engine.removeOffBound(0, 0, canvasWidth, canvasHeight)
+      // rotatingObstacle1.angularVelocity = 0.004
     }
 
     requestAnimationFrame(update)

@@ -4,7 +4,17 @@ import { Vec2 } from './Vec2.js'
 
 export const Bodies = {
   circle: function (x, y, radius, option = {}) {
-    if (typeof option != 'object') throw `Body's option must be of type object!`
+    if (typeof option != 'object') {
+      console.warn(`
+        Bodies.circle( 
+          x: Number, 
+          y: Number, 
+          radius: Number
+          option: {}
+        )
+      `)
+      throw `Body's option must be of type object!`
+    }
 
     const properties = {
       label: 'circle',
@@ -18,7 +28,18 @@ export const Bodies = {
   },
 
   rectangle: function (x, y, width, height, option = {}) {
-    if (typeof option != 'object') throw `Body's option must be of type object!`
+    if (typeof option != 'object') {
+      console.warn(`
+        Bodies.rectangle( 
+          x: Number, 
+          y: Number, 
+          width: Number, 
+          height: Number,
+          option: {}
+        )
+      `)
+      throw `Body's option must be of type object!`
+    }
 
     const vertices = [
       new Vec2(x - width * 0.5, y - height * 0.5),
@@ -48,7 +69,18 @@ export const Bodies = {
   },
 
   pill: function (x, y, radius, height, option = {}) {
-    if (typeof option != 'object') throw `Body's option must be of type object!`
+    if (typeof option != 'object') {
+      console.warn(`
+        Bodies.pill( 
+          x: Number, 
+          y: Number, 
+          radius: Number,
+          height: Number
+          option: {}
+        )
+      `)
+      throw `Body's option must be of type object!`
+    }
 
     const vertices = [
       new Vec2(x - radius, y - height * 0.5),
@@ -72,7 +104,15 @@ export const Bodies = {
   },
 
   polygon: function (vertices = [], option = {}) {
-    if (typeof option != 'object') throw `Body's option must be of type object!`
+    if (typeof option != 'object') {
+      console.log(`
+        Bodies.polygon( 
+          vertices: [{x, y}]
+          option: {}
+        )
+      `)
+      throw `Body's option must be of type object!`
+    }
 
     if (vertices.length < 3)
       throw `Polygon's body expects atleast 3 or more vertices!`
@@ -97,5 +137,37 @@ export const Bodies = {
     }
 
     return new Body(properties, option)
+  },
+
+  log: function () {
+    console.log(`
+      Bodies.circle( 
+        x: Number, 
+        y: Number, 
+        radius: Number,
+        option: {}
+      )
+      
+      Bodies.rectangle( 
+        x: Number, 
+        y: Number, 
+        width: Number,
+        height: Number,
+        option: {}
+      )
+      
+      Bodies.pill( 
+        x: Number, 
+        y: Number, 
+        radius: Number,
+        height: Number,
+        option: {}
+      )
+      
+      Bodies.polygon( 
+        vertices: [{x, y}]
+        option: {}
+      )
+    `)
   }
 }

@@ -1,7 +1,47 @@
 import { Vec2 } from './Vec2.js'
 
 export class Collision {
-  static _edgesInDirection(vertices, direction) {
+  /**
+   * Given a non closing `edges`,
+   * the method will take the point found in each edge
+   * closest to the `targetPoint`.
+   * @method _getClosestContactPointInEdges
+   * @param {Array []} edges
+   * @param {Vec2} targetPoint
+   */
+  static _getClosestContactPointInEdges(edges, targetPoint) {
+    let minDistanceSq = Infinity
+    const closestPoint = new Vec2()
+    const n = edges.length
+
+    for (let i = 0; i < n - 1; ++i) {
+      const currPoint = edges[i]
+      const nextPoint = edges[(i + 1) % n]
+
+      const { contactPoint, distanceSq } = this._getPointInLineSegment(
+        currPoint,
+        nextPoint,
+        targetPoint
+      )
+
+      if (distanceSq < minDistanceSq) {
+        minDistanceSq = distanceSq
+        closestPoint.copy(contactPoint)
+      }
+    }
+
+    return closestPoint
+  }
+
+  /**
+   * The method will find the farthest point from a set of `vertices`
+   * to a given `direction` then saves it along with it's previous and next
+   * point as the found edges in that direction.
+   * @method _getVerticesEdgesInDirection
+   * @param {Array []} vertices
+   * @param {Vec2} direction
+   */
+  static _getVerticesEdgesInDirection(vertices, direction) {
     const n = vertices.length
     let maxDistance = -Infinity
     let edges = null
@@ -18,7 +58,15 @@ export class Collision {
     return edges
   }
 
-  static _projectPoints(points, radius, axis) {
+  /**
+   * The method is use to project a point with a given `radius`.
+   * Usefull for bodies like circles or capsules (pill - swept circle).
+   * @method _projectPointsWithRadius
+   * @param {Array []} points
+   * @param {Number} radius
+   * @param {Vec2} axis
+   */
+  static _projectPointsWithRadius(points, radius, axis) {
     let min = Infinity
     let max = -Infinity
 
@@ -32,21 +80,34 @@ export class Collision {
     return { min: min - radius, max: max + radius }
   }
 
-  static _projectPolygon(vertices, axis) {
+  /**
+   * The method projects a set of `vertices` (points) into a given `axis`
+   * to find the min and max projection.
+   * @method _projectVertices
+   * @param {Array []} vertices
+   * @param {Vec2} axis
+   */
+  static _projectVertices(vertices, axis) {
     let min = Infinity
     let max = -Infinity
 
     vertices.forEach(point => {
       const projection = point.dot(axis)
 
-      min = Math.min(projection, min)
-      max = Math.max(projection, max)
+      if (projection < min) min = projection
+      if (projection > max) max = projection
     })
 
     return { min, max }
   }
 
-  static _closestPointOfVertices(vertices, targetPoint) {
+  /**
+   * Finds the closest point of `vertices` to the `targetPoint`.
+   * @method _getVerticesClosestPoint
+   * @param {Array []} vertices
+   * @param {Vec2} targetPoint
+   */
+  static _getVerticesClosestPoint(vertices, targetPoint) {
     let index = -1
     let minDistanceSq = Infinity
 
@@ -62,7 +123,15 @@ export class Collision {
     return vertices[index]
   }
 
-  static _pointInLineSegment(startPoint, endPoint, targetPoint) {
+  /**
+   * The method will take the point found in the line `startPoint` and `endPoint`
+   * closest to the `targetPoint`.
+   * @method _getPointInLineSegment
+   * @param {Vec2} startPoint
+   * @param {Vec2} endPoint
+   * @param {Vec2} targetPoint
+   */
+  static _getPointInLineSegment(startPoint, endPoint, targetPoint) {
     const ab = Vec2.subtract(endPoint, startPoint)
     const ap = Vec2.subtract(targetPoint, startPoint)
     const abLengthSq = ab.magnitudeSq()
@@ -80,20 +149,19 @@ export class Collision {
     return { contactPoint, distanceSq }
   }
 
-  // Circle To Circle
+  /**
+   * Perform the collision detection between two circles.
+   * @method detectCircleToCircle 'Better'
+   * @param {Circle Body} bodyA
+   * @param {Circle Body} bodyB
+   */
   static detectCircleToCircle(bodyA, bodyB) {
     const direction = Vec2.subtract(bodyB.position, bodyA.position)
     const distanceSq = direction.magnitudeSq()
     const radii = bodyA.radius + bodyB.radius
 
-    if (distanceSq == 0 || distanceSq >= radii * radii) {
-      return {
-        collision: false,
-        normal: null,
-        overlapDepth: 0,
-        contactPoints: null
-      }
-    }
+    if (distanceSq == 0 || distanceSq > radii * radii)
+      return { collision: null }
 
     const distance = Math.sqrt(distanceSq)
     const normal = direction.scale(1 / distance)
@@ -106,45 +174,52 @@ export class Collision {
       contactPoints: [
         Vec2.add(bodyA.position, Vec2.scale(normal, bodyA.radius))
       ],
-      edgeA: true,
-      edgeB: true
+      edgeA: true, // This is use to visualize the contact edge. See Engine._drawArcEdge
+      edgeB: true // This is use to visualize the contact edge. See Engine._drawArcEdge
     }
   }
 
-  // Circle To Polygon
+  /**
+   * Perform the collision detection between a circle and a rectangle (polygon).
+   * @method detectCircleToRectangle 'Fine'
+   * @param {Circle Body} bodyA
+   * @param {(Polygon || Rectangle) Body} bodyB
+   */
   static detectCircleToRectangle(bodyA, bodyB) {
     const normal = new Vec2()
-    let minOverlapDepth = Infinity
-
+    let overlapDepth = Infinity
     const direction = Vec2.subtract(bodyB.position, bodyA.position)
-    const edges = this._edgesInDirection(bodyB.vertices, Vec2.negate(direction))
-    const closestPoint = this._closestPointOfVertices(edges, bodyA.position)
+    const edges = this._getVerticesEdgesInDirection(
+      bodyB.vertices,
+      Vec2.negate(direction)
+    )
+    const closestPoint = this._getVerticesClosestPoint(edges, bodyA.position)
     const axes = [
-      Vec2.subtract(closestPoint, bodyA.position).normalize(),
-      Vec2.subtract(edges[1], edges[0]).perp().normalize(),
-      Vec2.subtract(edges[2], edges[1]).perp().normalize()
+      Vec2.subtract(closestPoint, bodyA.position),
+      Vec2.subtract(edges[1], edges[0]).perp(),
+      Vec2.subtract(edges[2], edges[1]).perp()
     ]
 
     for (const axis of axes) {
-      const projA = this._projectPoints([bodyA.position], bodyA.radius, axis)
-      const projB = this._projectPolygon(bodyB.vertices, axis)
+      axis.normalize()
 
-      if (projA.min > projB.max || projB.min > projA.max) {
-        return {
-          collision: false,
-          normal: null,
-          overlapDepth: 0,
-          contactPoints: null
-        }
-      }
+      const projA = this._projectPointsWithRadius(
+        [bodyA.position],
+        bodyA.radius,
+        axis
+      )
+      const projB = this._projectVertices(bodyB.vertices, axis)
+
+      if (projA.min > projB.max || projB.min > projA.max)
+        return { collision: null }
 
       const axisOverlapDepth = Math.min(
         projA.max - projB.min,
         projB.max - projA.min
       )
 
-      if (axisOverlapDepth < minOverlapDepth) {
-        minOverlapDepth = axisOverlapDepth
+      if (axisOverlapDepth < overlapDepth) {
+        overlapDepth = axisOverlapDepth
         normal.copy(axis)
       }
 
@@ -153,13 +228,14 @@ export class Collision {
 
     // Supporting points
     let minDistanceSq = Infinity
-    let closestContactPoint = null
+    const minContactPoint = new Vec2()
+    const n = edges.length
 
-    for (let i = 0; i < edges.length - 1; ++i) {
+    for (let i = 0; i < n - 1; ++i) {
       const currPoint = edges[i]
-      const nextPoint = edges[(i + 1) % edges.length]
+      const nextPoint = edges[(i + 1) % n]
 
-      const { contactPoint, distanceSq } = this._pointInLineSegment(
+      const { contactPoint, distanceSq } = this._getPointInLineSegment(
         currPoint,
         nextPoint,
         bodyA.position
@@ -167,55 +243,74 @@ export class Collision {
 
       if (distanceSq < minDistanceSq) {
         minDistanceSq = distanceSq
-        closestContactPoint = contactPoint
+        minContactPoint.copy(contactPoint)
       }
     }
 
     return {
       collision: true,
       normal,
-      overlapDepth: minOverlapDepth,
-      contactPoints: [closestContactPoint],
-      edgeA: true,
-      edgeB: edges
+      overlapDepth,
+      contactPoints: [minContactPoint],
+      edgeA: true, // This is use to visualize the contact edge. See Engine._drawArcEdge
+      edgeB: edges // This is use to visualize the contact edge. See Engine._drawEdge
     }
   }
 
-  // Polygon To Polygon
+  /**
+   * Perform the collision detection between two polygons.
+   * @method detectPolygonToPolygon 'Fine'
+   * @param {(Polygon || Rectangle) Body} bodyA
+   * @param {(Polygon || Rectangle) Body} bodyB
+   */
   static detectPolygonToPolygon(bodyA, bodyB) {
     const normal = new Vec2()
-    let minOverlapDepth = Infinity
+    let overlapDepth = Infinity
     const direction = Vec2.subtract(bodyB.position, bodyA.position)
-    const edgeA = this._edgesInDirection(bodyA.vertices, direction)
-    const edgeB = this._edgesInDirection(bodyB.vertices, Vec2.negate(direction))
+    let edgeA = this._getVerticesEdgesInDirection(bodyA.vertices, direction)
+    let edgeB = this._getVerticesEdgesInDirection(
+      bodyB.vertices,
+      Vec2.negate(direction)
+    )
+
+    const closestContactToA = this._getClosestContactPointInEdges(
+      edgeB,
+      bodyA.position
+    )
+    const closestContactToB = this._getClosestContactPointInEdges(
+      edgeA,
+      bodyB.position
+    )
+
+    const directionA = Vec2.subtract(closestContactToA, bodyA.position)
+    const directionB = Vec2.subtract(closestContactToB, bodyB.position)
+
+    edgeA = this._getVerticesEdgesInDirection(bodyA.vertices, directionA)
+    edgeB = this._getVerticesEdgesInDirection(bodyB.vertices, directionB)
 
     const axes = [
-      Vec2.subtract(edgeA[1], edgeA[0]).perp().normalize(),
-      Vec2.subtract(edgeA[2], edgeA[1]).perp().normalize(),
-      Vec2.subtract(edgeB[1], edgeB[0]).perp().normalize(),
-      Vec2.subtract(edgeB[2], edgeB[1]).perp().normalize()
+      Vec2.subtract(edgeA[1], edgeA[0]).perp(),
+      Vec2.subtract(edgeA[2], edgeA[1]).perp(),
+      Vec2.subtract(edgeB[1], edgeB[0]).perp(),
+      Vec2.subtract(edgeB[2], edgeB[1]).perp()
     ]
 
     for (const axis of axes) {
-      const projA = this._projectPolygon(bodyA.vertices, axis)
-      const projB = this._projectPolygon(bodyB.vertices, axis)
+      axis.normalize()
 
-      if (projA.min > projB.max || projB.min > projA.max) {
-        return {
-          collision: false,
-          normal: null,
-          overlapDepth: 0,
-          contactPoints: null
-        }
-      }
+      const projA = this._projectVertices(bodyA.vertices, axis)
+      const projB = this._projectVertices(bodyB.vertices, axis)
+
+      if (projA.min > projB.max || projB.min > projA.max)
+        return { collision: null }
 
       const axisOverlapDepth = Math.min(
         projA.max - projB.min,
         projB.max - projA.min
       )
 
-      if (axisOverlapDepth < minOverlapDepth) {
-        minOverlapDepth = axisOverlapDepth
+      if (axisOverlapDepth < overlapDepth) {
+        overlapDepth = axisOverlapDepth
         normal.copy(axis)
       }
 
@@ -223,29 +318,28 @@ export class Collision {
     }
 
     // Supporting points
+    const contactPoints = []
     const contactPoint1 = new Vec2()
     const contactPoint2 = new Vec2()
     let contactCounts = 0
     let minDistanceSq = Infinity
 
-    const findContactPoint = (points, vertices) => {
-      points.forEach(point => {
-        for (let i = 0; i < vertices.length - 1; ++i) {
-          const currPoint = vertices[i]
-          const nextPoint = vertices[(i + 1) % vertices.length]
+    function _scanPointsOfContact(points, vertices) {
+      let n = vertices.length
 
-          const { contactPoint, distanceSq } = this._pointInLineSegment(
+      points.forEach(point => {
+        for (let i = 0; i < n - 1; ++i) {
+          const currPoint = vertices[i]
+          const nextPoint = vertices[i + 1]
+
+          const { contactPoint, distanceSq } = Collision._getPointInLineSegment(
             currPoint,
             nextPoint,
             point
           )
 
           if (Math.abs(distanceSq - minDistanceSq) <= 5e-4) {
-            if (
-              !contactPoint.equal(contactPoint1) &&
-              !contactPoint.equal(contactPoint2)
-            ) {
-              minDistanceSq = distanceSq
+            if (!contactPoint.equal(contactPoint1)) {
               contactPoint2.copy(contactPoint)
               contactCounts = 2
             }
@@ -258,10 +352,8 @@ export class Collision {
       })
     }
 
-    findContactPoint(bodyA.vertices, edgeB)
-    findContactPoint(bodyB.vertices, edgeA)
-
-    const contactPoints = []
+    _scanPointsOfContact(edgeA, edgeB)
+    _scanPointsOfContact(edgeB, edgeA)
 
     if (contactCounts == 1) {
       contactPoints.push(contactPoint1)
@@ -269,68 +361,75 @@ export class Collision {
       contactPoints.push(contactPoint1, contactPoint2)
     }
 
-    const edgeDirectionA = Vec2.subtract(contactPoint1, bodyA.position)
-    const edgeDirectionB = Vec2.subtract(contactPoint1, bodyB.position)
-
-    const finalEdgeA = this._edgesInDirection(bodyA.vertices, edgeDirectionA)
-    const finalEdgeB = this._edgesInDirection(bodyB.vertices, edgeDirectionB)
-
     return {
       collision: true,
       normal,
-      overlapDepth: minOverlapDepth,
+      overlapDepth,
       contactPoints,
-      edgeA: finalEdgeA,
-      edgeB: finalEdgeB
+      edgeA: edgeA, // This is use to visualize the contact edge. See Engine._drawEdge
+      edgeB: edgeB // This is use to visualize the contact edge. See Engine._drawEdge
     }
   }
 
-  // Polygon To Pill
+  /**
+   * Perform the collision detection between a rectangle (polygon)
+   * and a capsule (pill - swept circle).
+   * @method detectPolygonToPill 'Fine'
+   * @param {(Polygon || Rectangle) Body} bodyA
+   * @param {Pill Body} bodyB
+   */
   static detectPolygonToPill(bodyA, bodyB) {
     const normal = new Vec2()
-    let minOverlapDepth = Infinity
-
+    let overlapDepth = Infinity
     const direction = Vec2.subtract(bodyB.position, bodyA.position)
-    const edges = this._edgesInDirection(bodyA.vertices, direction)
-    const pillSegment = Vec2.subtract(bodyB.startPoint, bodyB.endPoint)
-    const closestPoint = this._closestPointOfVertices(edges, bodyB.position)
-    const { contactPoint: pointInPillSegment } = this._pointInLineSegment(
-      bodyB.startPoint,
-      bodyB.endPoint,
-      closestPoint
+    let edgeA = this._getVerticesEdgesInDirection(bodyA.vertices, direction)
+    let edgeB = [bodyB.startPoint, bodyB.endPoint]
+
+    const closestContactToA = this._getClosestContactPointInEdges(
+      edgeB,
+      bodyA.position
+    )
+    const newDirectionA = Vec2.subtract(closestContactToA, bodyA.position)
+
+    edgeA = this._getVerticesEdgesInDirection(bodyA.vertices, newDirectionA)
+
+    const closestPointOfA = this._getVerticesClosestPoint(
+      bodyA.vertices,
+      bodyB.position
+    )
+    const { contactPoint: contactPointInB } = this._getPointInLineSegment(
+      edgeB[0],
+      edgeB[1],
+      closestPointOfA
     )
 
     const axes = [
-      Vec2.subtract(pointInPillSegment, closestPoint).normalize(),
-      pillSegment.perp().normalize(),
-      Vec2.subtract(edges[1], edges[0]).perp().normalize(),
-      Vec2.subtract(edges[2], edges[1]).perp().normalize()
+      Vec2.subtract(contactPointInB, closestPointOfA),
+      Vec2.subtract(edgeB[1], edgeB[0]).perp(),
+      Vec2.subtract(edgeA[1], edgeA[0]).perp(),
+      Vec2.subtract(edgeA[2], edgeA[1]).perp()
     ]
 
     for (const axis of axes) {
-      const projA = this._projectPolygon(bodyA.vertices, axis)
-      const projB = this._projectPoints(
+      axis.normalize()
+
+      const projA = this._projectVertices(bodyA.vertices, axis)
+      const projB = this._projectPointsWithRadius(
         [bodyB.startPoint, bodyB.endPoint],
         bodyB.radius,
         axis
       )
 
-      if (projA.min > projB.max || projB.min > projA.max) {
-        return {
-          collision: false,
-          normal: null,
-          overlapDepth: 0,
-          contactPoints: null
-        }
-      }
+      if (projA.min > projB.max || projB.min > projA.max)
+        return { collision: null }
 
       const axisOverlapDepth = Math.min(
         projA.max - projB.min,
         projB.max - projA.min
       )
 
-      if (axisOverlapDepth < minOverlapDepth) {
-        minOverlapDepth = axisOverlapDepth
+      if (axisOverlapDepth < overlapDepth) {
+        overlapDepth = axisOverlapDepth
         normal.copy(axis)
       }
 
@@ -338,29 +437,28 @@ export class Collision {
     }
 
     // Supporting points
+    const contactPoints = []
     const contactPoint1 = new Vec2()
     const contactPoint2 = new Vec2()
     let contactCounts = 0
     let minDistanceSq = Infinity
 
-    const findContactPoint = (points, vertices) => {
-      points.forEach(point => {
-        for (let i = 0; i < vertices.length - 1; ++i) {
-          const currPoint = vertices[i]
-          const nextPoint = vertices[(i + 1) % vertices.length]
+    function _scanPointsOfContact(points, vertices) {
+      const n = vertices.length
 
-          const { contactPoint, distanceSq } = this._pointInLineSegment(
+      points.forEach(point => {
+        for (let i = 0; i < n - 1; ++i) {
+          const currPoint = vertices[i]
+          const nextPoint = vertices[(i + 1) % n]
+
+          const { contactPoint, distanceSq } = Collision._getPointInLineSegment(
             currPoint,
             nextPoint,
             point
           )
 
           if (Math.abs(distanceSq - minDistanceSq) <= 5e-4) {
-            if (
-              !contactPoint.equal(contactPoint1) &&
-              !contactPoint.equal(contactPoint2)
-            ) {
-              minDistanceSq = distanceSq
+            if (!contactPoint.equal(contactPoint1)) {
               contactPoint2.copy(contactPoint)
               contactCounts = 2
             }
@@ -373,7 +471,7 @@ export class Collision {
       })
     }
 
-    findContactPoint(bodyA.vertices, [bodyB.startPoint, bodyB.endPoint])
+    _scanPointsOfContact(edgeA, edgeB)
 
     if (contactCounts == 1) {
       contactPoint1.add(Vec2.scale(normal, -bodyB.radius))
@@ -382,9 +480,7 @@ export class Collision {
       contactPoint2.add(Vec2.scale(normal, -bodyB.radius))
     }
 
-    findContactPoint([bodyB.startPoint, bodyB.endPoint], edges)
-
-    const contactPoints = []
+    _scanPointsOfContact(edgeB, edgeA)
 
     if (contactCounts == 1) {
       contactPoints.push(contactPoint1)
@@ -392,70 +488,62 @@ export class Collision {
       contactPoints.push(contactPoint1, contactPoint2)
     }
 
-    const edgeDirectionA = Vec2.subtract(contactPoint1, bodyA.position)
-    const finalEdgeA = this._edgesInDirection(bodyA.vertices, edgeDirectionA)
-
     return {
       collision: true,
       normal,
-      overlapDepth: minOverlapDepth,
+      overlapDepth,
       contactPoints,
-      edgeA: finalEdgeA,
-      edgeB: pointInPillSegment
+      edgeA: edgeA, // This is use to visualize the contact edge. See Engine._drawEdge
+      edgeB: contactPointInB // This is use to visualize the contact edge. See Engine._drawPillEdge
     }
   }
 
-  // Pill To Pill
+  /**
+   * Perform the collision detection between two capsules (pills - swept circles)
+   * @method detectPillToPill Debug: finding contactPoints is not properly implemented.
+   * @param {Pill Body} bodyA
+   * @param {Pill Body} bodyB
+   */
   static detectPillToPill(bodyA, bodyB) {
-    let normal = new Vec2()
-    let minOverlapDepth = Infinity
+    const normal = new Vec2()
+    let overlapDepth = Infinity
+    const edgeA = [bodyA.startPoint, bodyA.endPoint]
+    const edgeB = [bodyB.startPoint, bodyB.endPoint]
 
-    const { contactPoint: pointA } = this._pointInLineSegment(
-      bodyA.startPoint,
-      bodyA.endPoint,
+    const { contactPoint: contactPointInA } = this._getPointInLineSegment(
+      edgeA[0],
+      edgeA[1],
       bodyB.position
     )
-    const { contactPoint: pointB } = this._pointInLineSegment(
-      bodyB.startPoint,
-      bodyB.endPoint,
+    const { contactPoint: contactPointInB } = this._getPointInLineSegment(
+      edgeB[0],
+      edgeB[1],
       bodyA.position
     )
-    const direction = Vec2.subtract(pointB, pointA)
 
+    const direction = Vec2.subtract(contactPointInB, contactPointInA)
     const axes = [
-      direction.normalize(),
-      Vec2.subtract(bodyA.startPoint, bodyA.endPoint).perp().normalize(),
-      Vec2.subtract(bodyB.startPoint, bodyB.endPoint).perp().normalize()
+      direction,
+      Vec2.subtract(edgeA[1], edgeA[0]).perp(),
+      Vec2.subtract(edgeB[1], edgeB[0]).perp()
     ]
 
     for (const axis of axes) {
-      const projA = this._projectPoints(
-        [bodyA.startPoint, bodyA.endPoint],
-        bodyA.radius,
-        axis
-      )
-      const projB = this._projectPoints(
-        [bodyB.startPoint, bodyB.endPoint],
-        bodyB.radius,
-        axis
-      )
+      axis.normalize()
 
-      if (projA.min > projB.max || projB.min > projA.max) {
-        return {
-          collision: false,
-          normal: null,
-          overlapDepth: 0,
-          contactPoints: null
-        }
-      }
+      const projA = this._projectPointsWithRadius(edgeA, bodyA.radius, axis)
+      const projB = this._projectPointsWithRadius(edgeB, bodyB.radius, axis)
+
+      if (projA.min > projB.max || projB.min > projA.max)
+        return { collision: null }
 
       const axisOverlapDepth = Math.min(
         projA.max - projB.min,
         projB.max - projA.min
       )
 
-      if (axisOverlapDepth < minOverlapDepth) {
-        minOverlapDepth = axisOverlapDepth
+      if (axisOverlapDepth < overlapDepth) {
+        overlapDepth = axisOverlapDepth
         normal.copy(axis)
       }
 
@@ -463,46 +551,38 @@ export class Collision {
     }
 
     // Supporting points
+    const contactPoints = []
     const contactPoint1 = new Vec2()
     const contactPoint2 = new Vec2()
     let contactCounts = 0
     let minDistanceSq = Infinity
 
-    const findContactPoint = (points, vertices, radius) => {
+    function _scanPointsOfContact(points, edge, radius) {
       points.forEach(point => {
-        const currPoint = vertices[0]
-        const nextPoint = vertices[1]
+        const currPoint = edge[0]
+        const nextPoint = edge[1]
 
-        const { contactPoint, distanceSq } = this._pointInLineSegment(
+        const { contactPoint, distanceSq } = Collision._getPointInLineSegment(
           currPoint,
           nextPoint,
           point
         )
 
-        if (Math.abs(distanceSq - minDistanceSq) <= 5e-4) {
-          if (
-            !contactPoint.equal(contactPoint1) &&
-            !contactPoint.equal(contactPoint2)
-          ) {
-            minDistanceSq = distanceSq
-            contactPoint2.copy(contactPoint.add(Vec2.scale(normal, radius)))
+        if (Math.abs(distanceSq - minDistanceSq) < 5e-4) {
+          if (!contactPoint.equal(contactPoint1)) {
+            contactPoint2.copy(contactPoint.add(normal, radius))
             contactCounts = 2
           }
         } else if (distanceSq < minDistanceSq) {
           minDistanceSq = distanceSq
-          contactPoint1.copy(contactPoint.add(Vec2.scale(normal, radius)))
+          contactPoint1.copy(contactPoint.add(normal, radius))
           contactCounts = 1
         }
       })
     }
 
-    const verticesA = [bodyA.startPoint, bodyA.endPoint]
-    const verticesB = [bodyB.startPoint, bodyB.endPoint]
-
-    findContactPoint(verticesA, verticesB, -bodyB.radius)
-    findContactPoint(verticesB, verticesA, bodyA.radius)
-
-    const contactPoints = []
+    _scanPointsOfContact(edgeA, edgeB, -bodyB.radius)
+    _scanPointsOfContact(edgeB, edgeA, bodyA.radius)
 
     if (contactCounts == 1) {
       contactPoints.push(contactPoint1)
@@ -513,50 +593,48 @@ export class Collision {
     return {
       collision: true,
       normal,
-      overlapDepth: minOverlapDepth,
+      overlapDepth,
       contactPoints,
-      edgeA: pointA,
-      edgeB: pointB
+      edgeA: contactPointInA, // This is use to visualize the contact edge. See Engine._drawPillEdge
+      edgeB: contactPointInB // This is use to visualize the contact edge. See Engine._drawPillEdge
     }
   }
 
-  // Circle To Pill
+  /**
+   * Perform the collision detection between a circle
+   * and a capsule (pill - swept circle).
+   * @method detectCircleToPill 'Fine'
+   * @param {Circle Body} bodyA
+   * @param {Pill Body} bodyB
+   */
   static detectCircleToPill(bodyA, bodyB) {
-    const { contactPoint: pointB } = this._pointInLineSegment(
-      bodyB.startPoint,
-      bodyB.endPoint,
+    const edgeB = [bodyB.startPoint, bodyB.endPoint]
+    const { contactPoint: contactPointInB } = this._getPointInLineSegment(
+      edgeB[0],
+      edgeB[1],
       bodyA.position
     )
 
-    const direction = Vec2.subtract(pointB, bodyA.position)
+    const direction = Vec2.subtract(contactPointInB, bodyA.position)
     const distanceSq = direction.magnitudeSq()
     const radii = bodyA.radius + bodyB.radius
 
-    if (distanceSq == 0 || distanceSq >= radii * radii) {
-      return {
-        collision: false,
-        normal: null,
-        overlapDepth: 0,
-        contactPoints: null
-      }
-    }
+    if (distanceSq == 0 || distanceSq > radii * radii)
+      return { collision: null }
 
     const distance = Math.sqrt(distanceSq)
     const normal = direction.scale(1 / distance)
     const overlapDepth = radii - distance
 
-    const contactPoint = Vec2.add(
-      bodyA.position,
-      Vec2.scale(normal, bodyA.radius)
-    )
-
     return {
       collision: true,
       normal,
       overlapDepth,
-      contactPoints: [contactPoint],
-      edgeA: true,
-      edgeB: pointB
+      contactPoints: [
+        Vec2.add(bodyA.position, Vec2.scale(normal, bodyA.radius))
+      ],
+      edgeA: true, // This is use to visualize the contact edge. See Engine._drawArcEdge
+      edgeB: contactPointInB // This is use to visualize the contact edge. See Engine._drawPillEdge
     }
   }
 }

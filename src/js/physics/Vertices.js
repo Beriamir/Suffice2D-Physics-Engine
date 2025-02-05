@@ -1,4 +1,64 @@
+import { Vec2 } from './Vec2.js'
+
 export class Vertices {
+  static chamfer(vertices, radius, quality, qualityMin, qualityMax) {
+    if (radius && typeof radius == 'number') {
+      radius = [radius]
+    } else radius = radius || [8]
+
+    quality = quality || -1
+    qualityMin = qualityMin || 2
+    qualityMax = qualityMax || 14
+
+    const newVertices = []
+    const n = vertices.length
+
+    for (var i = 0; i < n; i++) {
+      const prevPoint = vertices[(i - 1 + n) % n]
+      const currPoint = vertices[i]
+      const nextPoint = vertices[(i + 1) % n]
+      const currRadius = radius[i > radius.length - 1 ? radius.length - 1 : i]
+
+      if (currRadius == 0) {
+        newVertices.push(currPoint)
+        continue
+      }
+
+      const prevNormal = Vec2.subtract(currPoint, prevPoint)
+        .perp(-1)
+        .normalize()
+      const nextNormal = Vec2.subtract(nextPoint, currPoint)
+        .perp(-1)
+        .normalize()
+      const diagonalRadius = Math.sqrt(2 * Math.pow(currRadius, 2))
+      const radiusVector = prevNormal.clone().scale(currRadius)
+      const midNormal = Vec2.add(prevNormal, nextNormal).scale(0.5).normalize()
+      const scaledVertex = Vec2.subtract(
+        currPoint,
+        Vec2.scale(midNormal, diagonalRadius)
+      )
+
+      let precision = quality
+
+      if (quality == -1) {
+        precision = Math.pow(currRadius, 0.32) * 1.75
+      }
+
+      precision = Math.max(qualityMin, Math.min(qualityMax, precision))
+
+      if (precision % 2 == 1) precision++
+
+      const alpha = Math.acos(prevNormal.dot(nextNormal))
+      const theta = alpha / precision
+
+      for (var j = 0; j < precision; j++) {
+        newVertices.push(radiusVector.rotate(theta * j).add(scaledVertex))
+      }
+    }
+
+    return newVertices
+  }
+
   static area(vertices) {
     let area = 0
 
@@ -100,5 +160,54 @@ export class Vertices {
     }
 
     return true
+  }
+
+  static hull(points) {
+    if (points.length < 3) return points
+
+    const vertices = points.map(point => point.clone())
+
+    vertices.sort((a, b) => {
+      if (a.x == b.x) {
+        return a.y - b.y
+      }
+
+      return a.x - b.x
+    })
+
+    const lower = []
+    for (let i = 0; i < vertices.length; ++i) {
+      while (
+        lower.length >= 2 &&
+        Vec2.cross3(
+          lower[lower.length - 2],
+          lower[lower.length - 1],
+          vertices[i]
+        ) <= 0
+      ) {
+        lower.pop()
+      }
+      lower.push(vertices[i])
+    }
+
+    const upper = []
+    for (let i = vertices.length - 1; i >= 0; --i) {
+      while (
+        upper.length >= 2 &&
+        Vec2.cross3(
+          upper[upper.length - 2],
+          upper[upper.length - 1],
+          vertices[i]
+        ) <= 0
+      ) {
+        upper.pop()
+      }
+      upper.push(vertices[i])
+    }
+
+    lower.pop()
+    upper.pop()
+
+    return lower.concat(upper)
   }
 }
