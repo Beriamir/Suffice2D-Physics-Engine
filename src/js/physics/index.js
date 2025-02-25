@@ -1,6 +1,6 @@
 import { Vec2 } from './Vec2.js'
+import { Bnd2 } from './Bnd2.js'
 import { Bodies } from './Bodies.js'
 import { Engine } from './Engine.js'
-import { Composite } from './Composite.js'
 
-export { Composite, Engine, Bodies, Vec2 }
+export { Engine, Bodies, Vec2, Bnd2 }

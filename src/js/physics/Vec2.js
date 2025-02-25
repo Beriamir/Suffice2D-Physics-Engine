@@ -50,7 +50,7 @@ export class Vec2 {
   }
 
   equal(v) {
-    return Vec2.distanceSq(this, v) < 2.5e-7
+    return Vec2.distanceSq(this, v) <= 5e-4 * 5e-4
   }
 
   string() {
