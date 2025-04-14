@@ -464,8 +464,9 @@ export class Collision {
       const projA = this._projectPointsWithRadius(edgeA, bodyA.radius, axis);
       const projB = this._projectPointsWithRadius(edgeB, bodyB.radius, axis);
 
-      if (projA.min > projB.max || projB.min > projA.max)
+      if (projA.min > projB.max || projB.min > projA.max) {
         return { collision: null };
+      }
 
       const axisOverlapDepth = Math.min(
         projA.max - projB.min,
@@ -542,8 +543,9 @@ export class Collision {
     const distanceSq = direction.magnitudeSq();
     const radii = bodyA.radius + bodyB.radius;
 
-    if (distanceSq == 0 || distanceSq > radii * radii)
+    if (distanceSq == 0 || distanceSq > radii * radii) {
       return { collision: null };
+    }
 
     const distance = Math.sqrt(distanceSq);
     const normal = direction.scale(1 / distance);

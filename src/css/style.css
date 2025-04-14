@@ -5,6 +5,7 @@ canvas {
   box-sizing: border-box;
   padding: 0;
   margin: 0;
+  font-size: 10px;
 }
 
 body {
@@ -13,6 +14,39 @@ body {
 }
 
 .canvas {
-  background:  #2f1e35;
+  background: #001122;
   position: absolute;
+}
+
+.btn:hover,
+.btn:focus {
+  background-color: #025fcb;
+}
+.btn {
+  background-color: #0076ff;
+  color: white;
+  border: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  font-size: 1.8rem;
+  border-radius: 10px;
+  padding: 10px 20px;
+  position: absolute;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 1;
+}
+
+button.shape-type {
+  bottom: 2rem;
+}
+
+button.restart {
+  bottom: 8rem;
+}
+
+button.debug {
+  bottom: 14rem;
 }

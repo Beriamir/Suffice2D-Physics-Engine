@@ -1,48 +1,49 @@
-import * as Physics from "./physics/index.js";
+import * as Physics from './physics/index.js';
 
 onload = function main() {
-  const Engine = Physics.Engine;
-  const Bodies = Physics.Bodies;
-
   const targetFPS = 60;
   const timeInterval = 1000 / targetFPS;
   let timeAccumulator = 0;
+  let lastTimeStamp = performance.now();
+  let deltaTime = 0;
 
-  const canvas = document.getElementById("canvas");
-  const ctx = canvas.getContext("2d");
-  let canvasWidth = innerWidth;
-  let canvasHeight = innerHeight;
-  const pixelRatio = 1 || devicePixelRatio;
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  let canvasWidth = (canvas.width = innerWidth);
+  let canvasHeight = (canvas.height = innerHeight);
 
-  const mouse = { x: canvasWidth / 2, y: canvasHeight / 2 };
-  let selectedBody = null;
-  const maxSize = 40;
-  const minSize = 30;
-  let wireframe = true;
-  const restitution = 0.9;
-  const solverIterations = 4;
-  const engine = new Engine({
-    solverIterations,
-    gravity: 9.81,
+  const mouse = new Physics.Vec2(canvasWidth / 2, canvasHeight / 2);
+  const bodySize = 40;
+
+  let wireframe = false;
+  let showGrid = false;
+  let renderDebug = false;
+  let restitution = 0.9;
+  let subSteps = 4;
+  let gravity = 9.8;
+  const engine = new Physics.Engine({
+    subSteps,
+    gravity,
     removeOffBound: true,
     bound: {
-      x: -maxSize,
-      y: -maxSize,
-      width: canvasWidth + maxSize,
-      height: canvasHeight + maxSize,
-      scale: canvasWidth > canvasHeight ? maxSize * 2 : maxSize
+      x: -bodySize,
+      y: -bodySize,
+      width: canvasWidth + bodySize,
+      height: canvasHeight + bodySize,
+      scale: canvasWidth > canvasHeight ? bodySize * 2 : bodySize
     }
   });
 
-  // Set canvas resolution
-  canvas.width = canvasWidth * pixelRatio;
-  canvas.height = canvasHeight * pixelRatio;
-  canvas.style.width = canvasWidth + "px";
-  canvas.style.height = canvasHeight + "px";
-  ctx.scale(pixelRatio, pixelRatio);
+  const shapeTypeBtn = document.getElementById('shape-type');
+  const shapeTypes = ['circle', 'pill', 'rectangle', 'polygon'];
+  let shapeTypeIndex = 0;
+  let shapeType = shapeTypes[shapeTypeIndex];
+
+  const restartBtn = document.getElementById('restart');
+  const debugBtn = document.getElementById('debug');
 
   function clamp(value, min = 0, max = 1) {
-    return Math.max(min, Math.min(max, value));
+    return value > max ? max : value < min ? min : value;
   }
 
   function throttle(callback, delay) {
@@ -57,271 +58,318 @@ onload = function main() {
   }
 
   /**
-   * User Interaction
+   * Event Listeners
    */
-  canvas.addEventListener("touchstart", event => {
-    event.preventDefault();
-    handleMouseDown(event.touches[0].clientX, event.touches[0].clientY);
-  });
-
-  canvas.addEventListener("touchend", event => {
-    event.preventDefault();
-    handleMouseUp(event.offsetX, event.offsetY);
-  });
-
-  canvas.addEventListener(
-    "touchmove",
-    throttle(event => {
-      event.preventDefault();
-      handleMouseMove(event.touches[0].clientX, event.touches[0].clientY);
-    }, 1000 / 30)
-  );
-
-  canvas.addEventListener("mousedown", event => {
+  canvas.addEventListener('mousedown', event => {
     event.preventDefault();
     handleMouseDown(event.offsetX, event.offsetY);
   });
 
-  canvas.addEventListener("mouseup", event => {
+  canvas.addEventListener('mouseup', event => {
     event.preventDefault();
-    handleMouseUp(event.offsetX, event.offsetY);
+    handleMouseUp();
   });
 
   canvas.addEventListener(
-    "mousemove",
+    'mousemove',
     throttle(event => {
       event.preventDefault();
       handleMouseMove(event.offsetX, event.offsetY);
-    }, 5000)
+    }, 4000 / targetFPS)
   );
 
+  canvas.addEventListener('touchstart', event => {
+    event.preventDefault();
+    handleMouseDown(event.touches[0].clientX, event.touches[0].clientY);
+  });
+
+  canvas.addEventListener('touchend', event => {
+    event.preventDefault();
+    handleMouseUp();
+  });
+
+  canvas.addEventListener(
+    'touchmove',
+    throttle(event => {
+      event.preventDefault();
+      handleMouseMove(event.touches[0].clientX, event.touches[0].clientY);
+    }, 4000 / targetFPS)
+  );
+
+  shapeTypeBtn.addEventListener('click', event => {
+    handleShapeTypeBtn();
+  });
+
+  restartBtn.addEventListener('click', event => {
+    handleRestartButton();
+  });
+
+  debugBtn.addEventListener('click', event => {
+    handleDebugButton();
+  });
+
+  /**
+   * Event Handlers
+   */
   function handleMouseDown(eventX, eventY) {
-    mouse.x = eventX;
-    mouse.y = eventY;
+    mouse.set(eventX, eventY);
 
-    for (let i = 0; i < engine.world.collections.length; i++) {
-      const body = engine.world.collections[i];
-
-      if (body.bound.contains(mouse)) {
-        selectedBody = body;
-        return;
-      }
-    }
-
-    const randomSize = Math.random() * (maxSize - minSize) + minSize;
-    const x = clamp(mouse.x, randomSize, canvasWidth - randomSize);
-    const y = clamp(mouse.y, randomSize, canvasHeight - randomSize);
+    const position = new Physics.Vec2(
+      clamp(mouse.x, bodySize, canvasWidth - bodySize),
+      clamp(mouse.y, bodySize, canvasHeight - bodySize)
+    );
     const option = {
       wireframe,
       restitution
-      //color: "#c3945c"
     };
-    const body = new Bodies.rectangle(x, y, maxSize, maxSize, option);
 
-    engine.world.addBody(body);
+    switch (shapeType) {
+      case 'circle': {
+        const body = new Physics.Bodies.circle(
+          position.x,
+          position.y,
+          bodySize * 0.5,
+          option
+        );
+
+        engine.world.addBody(body);
+        break;
+      }
+      case 'pill': {
+        const body = new Physics.Bodies.pill(
+          position.x,
+          position.y,
+          bodySize * 0.4,
+          bodySize * 0.6,
+          option
+        );
+
+        engine.world.addBody(body);
+        break;
+      }
+      case 'polygon': {
+        const vertices = [];
+        const edgeCount = Math.floor(Math.random() * (9 - 3) + 3);
+
+        for (let i = 0; i < edgeCount; ++i) {
+          const angle = (i * Math.PI * 2) / edgeCount;
+          const radius = bodySize * 0.65;
+
+          vertices.push(
+            new Physics.Vec2(
+              position.x + radius * Math.cos(angle),
+              position.y + radius * Math.sin(angle)
+            )
+          );
+        }
+
+        const body = new Physics.Bodies.polygon(vertices, option);
+
+        engine.world.addBody(body);
+        break;
+      }
+
+      case 'rectangle': {
+        const body = new Physics.Bodies.rectangle(
+          position.x,
+          position.y,
+          bodySize - 10,
+          bodySize + 10,
+          option
+        );
+
+        engine.world.addBody(body);
+        break;
+      }
+    }
   }
 
   function handleMouseMove(eventX, eventY) {
-    mouse.x = eventX;
-    mouse.y = eventY;
+    mouse.set(eventX, eventY);
 
-    if (selectedBody) {
-      const offset = {
-        x: mouse.x - selectedBody.position.x,
-        y: mouse.y - selectedBody.position.y
-      };
-      selectedBody.translate(offset, 0.6);
-      if (!selectedBody.isStatic) selectedBody.linearVelocity.add(offset, 0.01);
-      return;
-    }
-
-    let body = null;
-    const randomSize = Math.random() * (maxSize - minSize) + minSize;
-    const x = clamp(mouse.x, randomSize, canvasWidth - randomSize);
-    const y = clamp(mouse.y, randomSize, canvasHeight - randomSize);
-    const vertices = [];
-    const edgeCount = Math.floor(Math.random() * (8 - 6) + 6);
-    for (let i = 0; i < edgeCount; i++) {
-      const angle = (i * Math.PI * 2) / edgeCount;
-
-      const radius =
-        edgeCount < 9
-          ? Math.random() * (minSize - 10) + (maxSize - 10)
-          : randomSize;
-
-      vertices.push({
-        x: x + radius * 0.7 * Math.cos(angle),
-        y: y + radius * 0.7 * Math.sin(angle)
-      });
-    }
+    const position = new Physics.Vec2(
+      clamp(mouse.x, bodySize, canvasWidth - bodySize),
+      clamp(mouse.y, bodySize, canvasHeight - bodySize)
+    );
     const option = {
       wireframe,
       restitution
     };
 
-    if (Math.random() - 0.5 < 0) {
-      // option.color = "#eb8014";
-      body = new Bodies.circle(x, y, randomSize * 0.6, option);
-    } else {
-      if (Math.random() - 0.5 < 0) {
-        // option.color = "#2086b3";
-        body = new Bodies.pill(
-          x,
-          y,
-          randomSize * 0.4,
-          randomSize * 0.8,
+    switch (shapeType) {
+      case 'circle': {
+        const body = new Physics.Bodies.circle(
+          position.x,
+          position.y,
+          bodySize * 0.5,
           option
         );
-      } else {
-        // option.color = "#898989";
-        body = new Bodies.polygon(vertices, option);
+
+        engine.world.addBody(body);
+        break;
+      }
+      case 'pill': {
+        const body = new Physics.Bodies.pill(
+          position.x,
+          position.y,
+          bodySize * 0.4,
+          bodySize * 0.6,
+          option
+        );
+
+        engine.world.addBody(body);
+        break;
+      }
+      case 'polygon': {
+        const vertices = [];
+        const edgeCount = Math.floor(Math.random() * (9 - 3) + 3);
+
+        for (let i = 0; i < edgeCount; ++i) {
+          const angle = (i * Math.PI * 2) / edgeCount;
+          const radius = bodySize * 0.65;
+
+          vertices.push(
+            new Physics.Vec2(
+              position.x + radius * Math.cos(angle),
+              position.y + radius * Math.sin(angle)
+            )
+          );
+        }
+
+        const body = new Physics.Bodies.polygon(vertices, option);
+
+        engine.world.addBody(body);
+        break;
+      }
+      case 'rectangle': {
+        const body = new Physics.Bodies.rectangle(
+          position.x,
+          position.y,
+          bodySize - 10,
+          bodySize + 10,
+          option
+        );
+
+        engine.world.addBody(body);
+        break;
       }
     }
-
-    engine.world.addBody(body);
   }
 
   function handleMouseUp() {
-    selectedBody = null;
+    //
   }
 
-  let rotatingObstacle1 = null;
+  function handleShapeTypeBtn() {
+    shapeTypeIndex++;
+    shapeType = shapeTypes[shapeTypeIndex % shapeTypes.length];
+    shapeTypeBtn.innerText = shapeType + ' +';
+  }
+
+  function handleRestartButton() {
+    init();
+  }
+
+  function handleDebugButton() {
+    showGrid = !showGrid;
+    renderDebug = !renderDebug;
+
+    engine.world.collections.forEach(body => {
+      wireframe = renderDebug ? true : false;
+      body.wireframe = wireframe;
+    });
+  }
 
   function init() {
-    // Create static bodies
-    const color = "#4e3546";
-    const ground = new Bodies.pill(
-      canvasWidth * 0.5,
-      canvasHeight * 1.0,
-      20,
-      canvasWidth * 2,
+    engine.world.empty();
+    shapeTypeIndex = 0;
+    shapeType = shapeTypes[shapeTypeIndex];
+    shapeTypeBtn.innerText = shapeType + ' +';
+    wireframe = false;
+    showGrid = false;
+    renderDebug = false;
+
+    const ground = new Physics.Bodies.rectangle(
+      canvasWidth * 0.45,
+      canvasHeight * 0.9,
+      50,
+      canvasWidth * 0.6,
       {
-        isStatic: true,
         wireframe,
+        isStatic: true,
         rotation: false,
-        color: "#838383",
         restitution
       }
     );
-    rotatingObstacle1 = new Bodies.pill(
+    const obstacle1 = new Physics.Bodies.pill(
       canvasWidth * 0.2,
       canvasHeight * 0.5,
       20,
       canvasWidth < canvasHeight ? canvasWidth * 0.5 : canvasHeight * 0.5,
       {
-        isStatic: true,
         wireframe,
+        isStatic: true,
         rotation: true,
-        // color,
         restitution
       }
     );
-    const bigwall = new Bodies.rectangle(
+    const obstacle2 = new Physics.Bodies.rectangle(
       canvasWidth * 0.9,
       canvasHeight * 0.5,
       canvasWidth * 0.5,
       100,
       {
-        isStatic: true,
         wireframe,
+        isStatic: true,
         rotation: false,
-        // color,
         restitution
       }
     );
 
     ground.rotate(Math.PI * 0.5);
-    rotatingObstacle1.rotate(Math.PI * 0.5);
-    bigwall.rotate(Math.PI / 1.2);
-    // bigwall.roundCorner(40); // Does not recomended
+    obstacle1.rotate(Math.PI * 0.5);
+    obstacle2.rotate(Math.PI / 1.2);
 
-    engine.world.addBodies([ground]);
+    engine.world.addBodies([ground, obstacle1, obstacle2]);
   }
 
   init();
 
-  function spawner() {
-    setTimeout(() => {
-      spawner();
-    }, 1000 / 4);
-
-    let body = null;
-    const randomSize = Math.random() * (maxSize - minSize) + minSize;
-    const x = clamp(canvasWidth * 0.5, maxSize, canvasWidth - maxSize);
-    const y = clamp(canvasHeight * 0.1, 0, canvasHeight - maxSize);
-    const vertices = [];
-    const edgeCount = Math.floor(Math.random() * (16 - 3) + 3);
-
-    for (let i = 0; i < edgeCount; i++) {
-      const angle = (i * Math.PI * 2) / edgeCount;
-      const radius = Math.random() * (maxSize - minSize) + minSize;
-
-      vertices.push({
-        x: x + radius * 0.7 * Math.cos(angle),
-        y: y + radius * 0.7 * Math.sin(angle)
-      });
-    }
-
-    const option = {
-      wireframe,
-      restitution
-    };
-
-    if (Math.random() - 0.5 < 0) {
-      body = new Bodies.circle(x, y, maxSize * 0.5, option);
-    } else {
-      if (Math.random() - 0.5 < 0) {
-        body = new Bodies.pill(x, y, maxSize * 0.35, maxSize * 0.8, option);
-      } else {
-        body = new Bodies.polygon(vertices, option);
-      }
-    }
-
-    engine.world.addBody(body);
-  }
-
-  // spawner();
-
   function renderSimulation(ctx) {
     const fontSize = 12;
+
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-    // engine.renderGrid(ctx);
+
+    if (showGrid) engine.renderGrid(ctx);
 
     engine.world.collections.forEach(body => {
-      // body.bound.render(ctx);
       body.render(ctx);
-      // body.renderContacts(ctx);
+      if (renderDebug) body.renderDebug(ctx);
     });
 
-    ctx.fillStyle = "white";
+    ctx.fillStyle = 'white';
     ctx.font = `normal ${fontSize}px Arial`;
     ctx.fillText(
-      `${Math.round(1000 / update.deltaTime || 0)} fps`,
+      `
+        ${Math.round(1000 / deltaTime)} FPS 
+        ${engine.world.collections.length} Rigid Bodies 
+        ${subSteps} Sub Steps
+      `,
       fontSize,
       fontSize * 2
-    );
-    ctx.fillText(
-      `${engine.world.collections.length} bodies`,
-      fontSize,
-      fontSize * 3
-    );
-    ctx.fillText(
-      `${solverIterations} solver iterations`,
-      fontSize,
-      fontSize * 4
     );
   }
 
   function update(timeStamp) {
-    update.deltaTime = timeStamp - update.lastTimeStamp || 0;
-    update.lastTimeStamp = timeStamp;
-    timeAccumulator += update.deltaTime;
+    deltaTime = timeStamp - lastTimeStamp;
+    lastTimeStamp = timeStamp;
+    timeAccumulator += deltaTime;
 
     if (timeAccumulator > timeInterval) {
       timeAccumulator = 0;
 
       renderSimulation(ctx);
-      engine.run(update.deltaTime);
+      engine.run(deltaTime);
     }
 
     requestAnimationFrame(update);

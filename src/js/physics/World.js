@@ -40,6 +40,14 @@ export class World {
     });
   }
 
+  empty() {
+    this.collections.forEach(body => {
+      this.engine.grid.removeData(body);
+    });
+
+    this.collections.length = 0;
+  }
+
   render(ctx) {
     this.world.collections.forEach(body => {
       body.bound.render(ctx);

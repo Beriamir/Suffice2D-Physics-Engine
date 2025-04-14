@@ -1,4 +1,4 @@
-import { Vec2 } from "./Vec2.js";
+import { Vec2 } from './Vec2.js';
 
 export class Solver {
   static _clamp(value, min = 0, max = 1) {
@@ -10,12 +10,12 @@ export class Solver {
 
     // Separate Bodies
     if (!bodyA.isStatic && bodyB.isStatic) {
-      bodyA.translate(normal, -overlap);
+      bodyA.addForce(normal, -overlap);
     } else if (bodyA.isStatic && !bodyB.isStatic) {
-      bodyB.translate(normal, overlap);
+      bodyB.addForce(normal, overlap);
     } else if (!bodyA.isStatic && !bodyB.isStatic) {
-      bodyA.translate(normal, -overlap * 0.5);
-      bodyB.translate(normal, overlap * 0.5);
+      bodyA.addForce(normal, -overlap * 0.5);
+      bodyB.addForce(normal, overlap * 0.5);
     } else return;
 
     const vA = bodyA.linearVelocity;

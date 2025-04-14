@@ -1,6 +1,6 @@
-import { Vertices } from "./Vertices.js";
-import { Vec2 } from "./Vec2.js";
-import { Bnd2 } from "./Bnd2.js";
+import { Vertices } from './Vertices.js';
+import { Vec2 } from './Vec2.js';
+import { Bnd2 } from './Bnd2.js';
 
 export class Body {
   constructor(properties, option = {}) {
@@ -8,34 +8,34 @@ export class Body {
       const value = properties[property];
 
       switch (property) {
-        case "label":
+        case 'label':
           this.label = value;
           break;
-        case "type":
+        case 'type':
           this.type = value;
           break;
-        case "position":
+        case 'position':
           this.position = value;
           break;
-        case "axisPoint":
+        case 'axisPoint':
           this.axisPoint = value;
           break;
-        case "startPoint":
+        case 'startPoint':
           this.startPoint = value;
           break;
-        case "endPoint":
+        case 'endPoint':
           this.endPoint = value;
           break;
-        case "vertices":
+        case 'vertices':
           this.vertices = value;
           break;
-        case "radius":
+        case 'radius':
           this.radius = value;
           break;
-        case "width":
+        case 'width':
           this.width = value;
           break;
-        case "height":
+        case 'height':
           this.height = value;
           break;
       }
@@ -56,33 +56,38 @@ export class Body {
 
     let defaultFriction = null;
     switch (this.label) {
-      case "circle":
+      case 'circle':
         defaultFriction = { static: 0.8, kinetic: 0.7 };
         break;
 
-      case "rectangle":
-      case "polygon":
+      case 'rectangle':
+      case 'polygon':
         defaultFriction = { static: 0.9, kinetic: 0.8 };
         break;
 
-      case "pill":
+      case 'pill':
         defaultFriction = { static: 0.7, kinetic: 0.6 };
         break;
     }
     this.friction = option.friction || defaultFriction;
-    this.restitution = option.restitution || 0.0;
+    this.restitution =
+      option.restitution == undefined
+        ? 0.9
+        : option.restitution && typeof option.restitution != 'number'
+        ? 0.9
+        : option.restitution;
     this.density = option.density || 2700;
     this.thickness = option.thickness || 0.01;
 
     switch (this.label) {
-      case "circle":
+      case 'circle':
         this.area = this.radius * this.radius * Math.PI;
         break;
-      case "rectangle":
-      case "polygon":
+      case 'rectangle':
+      case 'polygon':
         this.area = Vertices.area(this.vertices);
         break;
-      case "pill":
+      case 'pill':
         this.area =
           this.radius * this.radius * Math.PI + Vertices.area(this.vertices);
         break;
@@ -91,16 +96,16 @@ export class Body {
     this.mass = this.density * this.area * this.thickness;
 
     switch (this.label) {
-      case "circle":
+      case 'circle':
         this.inertia = 0.5 * this.mass * this.radius * this.radius;
         break;
 
-      case "rectangle":
+      case 'rectangle':
         this.inertia =
           0.0833333333 * this.mass * (this.width ** 2 + this.height ** 2);
         break;
 
-      case "polygon": {
+      case 'polygon': {
         const radiusSq = this.radius ** 2;
         this.vertices.length < 4
           ? (this.inertia =
@@ -112,7 +117,7 @@ export class Body {
         break;
       }
 
-      case "pill": {
+      case 'pill': {
         const radiusSq = this.radius ** 2;
         const rectInertia =
           0.0833333333 *
@@ -135,31 +140,33 @@ export class Body {
 
     this.wireframe =
       option.wireframe == undefined
-        ? true
-        : option.wireframe && typeof option.wireframe != "boolean"
-        ? true
+        ? false
+        : option.wireframe && typeof option.wireframe != 'boolean'
+        ? false
         : option.wireframe;
 
     this.rotation =
       option.rotation == undefined
         ? true
-        : typeof option.rotation != "boolean"
+        : typeof option.rotation != 'boolean'
         ? true
         : option.rotation;
     this.isStatic = option.isStatic || false;
+    this.color = option.color || `hsla(${Math.random() * 360}, 100%, 50%, 70%)`;
 
-    if (this.isStatic) this.inverseMass = 0;
+    if (this.isStatic) {
+      this.inverseMass = 0;
+      this.color = option.color || 'hsla(0,0%,51.4%,70%)';
+    }
 
     if (!this.rotation) this.inverseInertia = 0;
-
-    this.color = option.color || `hsla(${Math.random() * 360}, 100%, 50%, 80%)`;
 
     this.bound = new Bnd2(this);
     this.contactPoints = [];
     this.edges = [];
   }
 
-  translate(offset, scalar = 1) {
+  addForce(offset, scalar = 1) {
     this.prevPosition.copy(this.position);
     this.position.add(offset, scalar);
     this.allVertices.forEach(point => point.add(offset, scalar));
@@ -176,7 +183,7 @@ export class Body {
   }
 
   roundCorner(radius) {
-    if (this.label == "rectangle" || this.label == "polygon") {
+    if (this.label == 'rectangle' || this.label == 'polygon') {
       this.vertices = Vertices.chamfer(this.vertices, radius);
 
       const direction = Vec2.subtract(this.vertices[0], this.position);
@@ -190,12 +197,12 @@ export class Body {
   render(ctx) {
     ctx.beginPath();
     switch (this.label) {
-      case "circle":
+      case 'circle':
         ctx.arc(this.position.x, this.position.y, this.radius, 0, Math.PI * 2);
         break;
 
-      case "rectangle":
-      case "polygon": {
+      case 'rectangle':
+      case 'polygon': {
         ctx.moveTo(this.vertices[0].x, this.vertices[0].y);
         for (let i = 1; i < this.vertices.length; i++)
           ctx.lineTo(this.vertices[i].x, this.vertices[i].y);
@@ -203,7 +210,7 @@ export class Body {
         break;
       }
 
-      case "pill": {
+      case 'pill': {
         const startDir = Vec2.subtract(this.vertices[0], this.startPoint);
         const endDir = Vec2.subtract(this.vertices[1], this.startPoint);
         const startAngle = Math.atan2(startDir.y, startDir.x);
@@ -239,17 +246,17 @@ export class Body {
     if (!this.wireframe) {
       ctx.fillStyle = this.color;
       ctx.fill();
-      ctx.strokeStyle = "#ffffffc0";
+      ctx.strokeStyle = '#ffffffc0';
       ctx.stroke();
     } else {
-      ctx.strokeStyle = this.isSleeping ? "#ffffff50" : "#ffffffc0";
+      ctx.strokeStyle = this.isSleeping ? '#ffffff50' : '#ffffffc0';
       ctx.stroke();
     }
   }
 
   renderContacts(ctx) {
-    ctx.fillStyle = "orange";
-    ctx.strokeStyle = "orange";
+    ctx.fillStyle = 'orange';
+    ctx.strokeStyle = 'orange';
     // ctx.fillStyle = '#ee5858cf';
     // ctx.strokeStyle = '#ee5858cf';
 
@@ -260,7 +267,7 @@ export class Body {
 
       switch (this.label) {
         // Circle Edge
-        case "circle": {
+        case 'circle': {
           const direction = Vec2.subtract(point, this.position);
           const angle = Math.atan2(direction.y, direction.x);
 
@@ -277,7 +284,7 @@ export class Body {
         }
 
         // Pill Edge
-        case "pill": {
+        case 'pill': {
           let edge = null;
           const ab = Vec2.subtract(this.endPoint, this.startPoint);
           const ap = Vec2.subtract(point, this.startPoint);
@@ -332,5 +339,24 @@ export class Body {
       ctx.lineTo(edge[2].x, edge[2].y);
       ctx.stroke();
     });
+  }
+
+  renderVelocity(ctx) {
+    const maxLength = 100;
+
+    ctx.beginPath();
+    ctx.moveTo(this.position.x, this.position.y);
+    ctx.lineTo(
+      this.position.x + this.linearVelocity.x * maxLength,
+      this.position.y + this.linearVelocity.y * maxLength
+    );
+    ctx.strokeStyle = 'orange';
+    ctx.stroke();
+  }
+
+  renderDebug(ctx) {
+    this.bound.render(ctx);
+    this.renderContacts(ctx);
+    this.renderVelocity(ctx);
   }
 }

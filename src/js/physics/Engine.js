@@ -1,40 +1,28 @@
-import { Vec2 } from "./Vec2.js";
-import { SpatialGrid } from "./SpatialGrid.js";
-import { Collision } from "./Collision.js";
-import { Solver } from "./Solver.js";
-import { World } from "./World.js";
+import { Vec2 } from './Vec2.js';
+import { SpatialGrid } from './SpatialGrid.js';
+import { Collision } from './Collision.js';
+import { Solver } from './Solver.js';
+import { World } from './World.js';
 
 export class Engine {
   constructor(option = {}) {
     this.world = new World(this);
-
-    if (option.gravity && typeof option.gravity != "number") {
-      option.gravity = 9.81;
-      console.warn(`Engine's gravity must be of type 'number'`);
-    } else if (option.gravity == undefined) option.gravity = 9.81;
-
     this.gravity = {
       x: 0,
-      y: option.gravity
+      y:
+        option.gravity == undefined
+          ? 9.81
+          : option.gravity && typeof option.gravity != 'number'
+          ? 9.81
+          : option.gravity
     };
 
-    option.bound = option.bound == undefined ? {} : option.bound;
-
-    if (option.bound && typeof option.bound != "object") {
-      console.warn(
-        `
-          Engine.bound must be of type object!
-          { 
-            x: Number, // Default 0
-            y: Number, // Default 0
-            width: Number, // Default innerWidth
-            height: Number, // Default innerHeight
-            scale: Number, // Default 40
-          }
-        `
-      );
-      option.bound = {};
-    }
+    option.bound =
+      option.bound == undefined
+        ? {}
+        : option.bound && typeof option.bound != 'object'
+        ? {}
+        : option.bound;
 
     this.grid = new SpatialGrid(
       option.bound.x || 0,
@@ -43,16 +31,16 @@ export class Engine {
       option.bound.height || innerHeight,
       option.bound.scale || 40
     );
-    this.solverIterations =
-      option.solverIterations == undefined
+    this.subSteps =
+      option.subSteps == undefined
         ? 4
-        : option.solverIterations && typeof option.solverIterations != "number"
+        : option.subSteps && typeof option.subSteps != 'number'
         ? 4
-        : option.solverIterations;
+        : option.subSteps;
     this.removeOffBound =
       option.removeOffBound == undefined
         ? false
-        : option.removeOffBound && typeof option.removeOffBound != "boolean"
+        : option.removeOffBound && typeof option.removeOffBound != 'boolean'
         ? false
         : option.removeOffBound;
   }
@@ -75,9 +63,9 @@ export class Engine {
   }
 
   run(deltaTime = 1000 / 60) {
-    deltaTime /= this.solverIterations;
+    deltaTime /= this.subSteps;
 
-    for (let iteration = 1; iteration <= this.solverIterations; ++iteration) {
+    for (let subStep = 1; subStep <= this.subSteps; ++subStep) {
       for (let i = 0; i < this.world.collections.length; ++i) {
         const bodyA = this.world.collections[i];
 
@@ -105,13 +93,14 @@ export class Engine {
         );
         */
 
-        const acceleration = Vec2.scale(this.gravity, bodyA.inverseMass);
+        const force = this.gravity;
+        const acceleration = Vec2.scale(force, bodyA.inverseMass);
 
         bodyA.linearVelocity.add(acceleration, deltaTime);
-        bodyA.translate(bodyA.linearVelocity, deltaTime);
+        bodyA.addForce(bodyA.linearVelocity, deltaTime);
         if (bodyA.rotation) bodyA.rotate(bodyA.angularVelocity * deltaTime);
 
-        if (iteration == 1) {
+        if (subStep == 1) {
           const velocityDamp = 0.999;
 
           bodyA.linearVelocity.scale(velocityDamp);
@@ -156,70 +145,70 @@ export class Engine {
   }
 
   _getCollisionType(labelA, labelB) {
-    if (labelA == "circle" && labelB == "circle") return "circle-circle";
+    if (labelA == 'circle' && labelB == 'circle') return 'circle-circle';
 
-    if (labelA == "circle" && (labelB == "rectangle" || labelB == "polygon")) {
-      return "circle-polygon";
+    if (labelA == 'circle' && (labelB == 'rectangle' || labelB == 'polygon')) {
+      return 'circle-polygon';
     }
 
     if (
-      (labelA == "rectangle" || labelA == "polygon") &&
-      (labelB == "rectangle" || labelB == "polygon")
+      (labelA == 'rectangle' || labelA == 'polygon') &&
+      (labelB == 'rectangle' || labelB == 'polygon')
     ) {
-      return "polygon-polygon";
+      return 'polygon-polygon';
     }
 
-    if ((labelA == "rectangle" || labelA == "polygon") && labelB == "pill") {
-      return "polygon-pill";
+    if ((labelA == 'rectangle' || labelA == 'polygon') && labelB == 'pill') {
+      return 'polygon-pill';
     }
 
-    if (labelA == "circle" && labelB == "pill") return "circle-pill";
+    if (labelA == 'circle' && labelB == 'pill') return 'circle-pill';
 
-    if (labelA == "pill" && labelB == "pill") return "pill-pill";
+    if (labelA == 'pill' && labelB == 'pill') return 'pill-pill';
 
-    return "unknown";
+    return 'unknown';
   }
 
   _detectCollision(bodyA, bodyB) {
     const collisionType = this._getCollisionType(bodyA.label, bodyB.label);
 
     switch (collisionType) {
-      case "circle-circle": {
+      case 'circle-circle': {
         const manifold = Collision.detectCircleToCircle(bodyA, bodyB);
 
         return manifold.collision ? manifold : null;
         break;
       }
 
-      case "circle-polygon": {
+      case 'circle-polygon': {
         const manifold = Collision.detectCircleToRectangle(bodyA, bodyB);
 
         return manifold.collision ? manifold : null;
         break;
       }
 
-      case "polygon-polygon": {
+      case 'polygon-polygon': {
         const manifold = Collision.detectPolygonToPolygon(bodyA, bodyB);
 
         return manifold.collision ? manifold : null;
         break;
       }
 
-      case "polygon-pill": {
+      case 'polygon-pill': {
         const manifold = Collision.detectPolygonToPill(bodyA, bodyB);
 
         return manifold.collision ? manifold : null;
         break;
       }
 
-      case "circle-pill": {
+      case 'circle-pill': {
         const manifold = Collision.detectCircleToPill(bodyA, bodyB);
 
         return manifold.collision ? manifold : null;
         break;
       }
 
-      case "pill-pill": {
+      case 'pill-pill': {
         const manifold = Collision.detectPillToPill(bodyA, bodyB);
 
         return manifold.collision ? manifold : null;
