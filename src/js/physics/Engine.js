@@ -1,14 +1,14 @@
-import { Vec2 } from './Vec2.js';
-import { SpatialGrid } from './SpatialGrid.js';
-import { Collision } from './Collision.js';
-import { Solver } from './Solver.js';
-import { World } from './World.js';
+import { Vec2 } from "./Vec2.js";
+import { SpatialGrid } from "./SpatialGrid.js";
+import { Collision } from "./Collision.js";
+import { Solver } from "./Solver.js";
+import { World } from "./World.js";
 
 export class Engine {
   constructor(option = {}) {
     this.world = new World(this);
 
-    if (option.gravity && typeof option.gravity != 'number') {
+    if (option.gravity && typeof option.gravity != "number") {
       option.gravity = 9.81;
       console.warn(`Engine's gravity must be of type 'number'`);
     } else if (option.gravity == undefined) option.gravity = 9.81;
@@ -20,7 +20,7 @@ export class Engine {
 
     option.bound = option.bound == undefined ? {} : option.bound;
 
-    if (option.bound && typeof option.bound != 'object') {
+    if (option.bound && typeof option.bound != "object") {
       console.warn(
         `
           Engine.bound must be of type object!
@@ -43,22 +43,16 @@ export class Engine {
       option.bound.height || innerHeight,
       option.bound.scale || 40
     );
-    this.wireframe =
-      option.wireframe == undefined
-        ? true
-        : option.wireframe && typeof option.wireframe != 'boolean'
-        ? true
-        : option.wireframe;
     this.solverIterations =
       option.solverIterations == undefined
         ? 4
-        : option.solverIterations && typeof option.solverIterations != 'number'
+        : option.solverIterations && typeof option.solverIterations != "number"
         ? 4
         : option.solverIterations;
     this.removeOffBound =
       option.removeOffBound == undefined
         ? false
-        : option.removeOffBound && typeof option.removeOffBound != 'boolean'
+        : option.removeOffBound && typeof option.removeOffBound != "boolean"
         ? false
         : option.removeOffBound;
   }
@@ -75,8 +69,9 @@ export class Engine {
       min.y < boundY - height ||
       max.x > boundW + width ||
       max.y > boundH + height
-    )
+    ) {
       this.world.removeBody(body);
+    }
   }
 
   run(deltaTime = 1000 / 60) {
@@ -87,7 +82,8 @@ export class Engine {
         const bodyA = this.world.collections[i];
 
         // Runge-Kutta-4th
-        /* let tempForce = null;
+        /*
+        let tempForce = null;
         let tempAcceleration = null;
         const acceleration = Vec2.scale(this.gravity, bodyA.inverseMass);
         const k1 = Vec2.scale(acceleration, deltaTime);
@@ -106,14 +102,20 @@ export class Engine {
 
         bodyA.linearVelocity.add(
           Vec2.scale(k1.add(k2.scale(2)).add(k3.scale(2)).add(k4), 1 / 6)
-        ); */
+        );
+        */
 
         const acceleration = Vec2.scale(this.gravity, bodyA.inverseMass);
+
         bodyA.linearVelocity.add(acceleration, deltaTime);
         bodyA.translate(bodyA.linearVelocity, deltaTime);
         if (bodyA.rotation) bodyA.rotate(bodyA.angularVelocity * deltaTime);
 
         if (iteration == 1) {
+          const velocityDamp = 0.999;
+
+          bodyA.linearVelocity.scale(velocityDamp);
+          bodyA.angularVelocity *= velocityDamp;
           this.grid.updateData(bodyA);
 
           if (
@@ -138,23 +140,15 @@ export class Engine {
 
         const nearby = this.grid.queryNearby(bodyA);
 
-        bodyA.contactPoints = [];
-        bodyA.edges = [];
+        bodyA.contactPoints.length = 0;
+        bodyA.edges.length = 0;
 
         for (const bodyB of nearby) {
           if (!bodyA.bound.overlaps(bodyB.bound)) continue;
           else {
             const manifold = this._detectCollision(bodyA, bodyB);
 
-            if (manifold) {
-              Solver.resolveCollision(
-                bodyA,
-                bodyB,
-                manifold.normal,
-                manifold.overlapDepth,
-                manifold.contactPoints
-              );
-            }
+            if (manifold) Solver.solveCollision(bodyA, bodyB, manifold);
           }
         }
       }
@@ -162,81 +156,75 @@ export class Engine {
   }
 
   _getCollisionType(labelA, labelB) {
-    if (labelA == 'circle' && labelB == 'circle') return 'circle-circle';
+    if (labelA == "circle" && labelB == "circle") return "circle-circle";
 
-    if (labelA == 'circle' && (labelB == 'rectangle' || labelB == 'polygon'))
-      return 'circle-rectangle-polygon';
+    if (labelA == "circle" && (labelB == "rectangle" || labelB == "polygon")) {
+      return "circle-polygon";
+    }
 
     if (
-      (labelA == 'rectangle' || labelA == 'polygon') &&
-      (labelB == 'rectangle' || labelB == 'polygon')
-    )
-      return 'rectangle-polygon';
+      (labelA == "rectangle" || labelA == "polygon") &&
+      (labelB == "rectangle" || labelB == "polygon")
+    ) {
+      return "polygon-polygon";
+    }
 
-    if ((labelA == 'rectangle' || labelA == 'polygon') && labelB == 'pill')
-      return 'polygon-pill';
+    if ((labelA == "rectangle" || labelA == "polygon") && labelB == "pill") {
+      return "polygon-pill";
+    }
 
-    if (labelA == 'circle' && labelB == 'pill') return 'circle-pill';
+    if (labelA == "circle" && labelB == "pill") return "circle-pill";
 
-    if (labelA == 'pill' && labelB == 'pill') return 'pill-pill';
+    if (labelA == "pill" && labelB == "pill") return "pill-pill";
 
-    return 'unknown';
+    return "unknown";
   }
 
   _detectCollision(bodyA, bodyB) {
-    let manifold = null;
     const collisionType = this._getCollisionType(bodyA.label, bodyB.label);
 
     switch (collisionType) {
-      case 'circle-circle': {
-        const { collision, normal, overlapDepth, contactPoints, edgeA, edgeB } =
-          Collision.detectCircleToCircle(bodyA, bodyB);
-        if (collision)
-          manifold = { normal, overlapDepth, contactPoints, edgeA, edgeB };
+      case "circle-circle": {
+        const manifold = Collision.detectCircleToCircle(bodyA, bodyB);
+
+        return manifold.collision ? manifold : null;
         break;
       }
 
-      case 'circle-rectangle-polygon': {
-        const { collision, normal, overlapDepth, contactPoints, edgeA, edgeB } =
-          Collision.detectCircleToRectangle(bodyA, bodyB);
-        if (collision)
-          manifold = { normal, overlapDepth, contactPoints, edgeA, edgeB };
+      case "circle-polygon": {
+        const manifold = Collision.detectCircleToRectangle(bodyA, bodyB);
+
+        return manifold.collision ? manifold : null;
         break;
       }
 
-      case 'rectangle-polygon': {
-        const { collision, normal, overlapDepth, contactPoints, edgeA, edgeB } =
-          Collision.detectPolygonToPolygon(bodyA, bodyB);
-        if (collision)
-          manifold = { normal, overlapDepth, contactPoints, edgeA, edgeB };
+      case "polygon-polygon": {
+        const manifold = Collision.detectPolygonToPolygon(bodyA, bodyB);
+
+        return manifold.collision ? manifold : null;
         break;
       }
 
-      case 'polygon-pill': {
-        const { collision, normal, overlapDepth, contactPoints, edgeA, edgeB } =
-          Collision.detectPolygonToPill(bodyA, bodyB);
-        if (collision)
-          manifold = { normal, overlapDepth, contactPoints, edgeA, edgeB };
+      case "polygon-pill": {
+        const manifold = Collision.detectPolygonToPill(bodyA, bodyB);
+
+        return manifold.collision ? manifold : null;
         break;
       }
 
-      case 'circle-pill': {
-        const { collision, normal, overlapDepth, contactPoints, edgeA, edgeB } =
-          Collision.detectCircleToPill(bodyA, bodyB);
-        if (collision)
-          manifold = { normal, overlapDepth, contactPoints, edgeA, edgeB };
+      case "circle-pill": {
+        const manifold = Collision.detectCircleToPill(bodyA, bodyB);
+
+        return manifold.collision ? manifold : null;
         break;
       }
 
-      case 'pill-pill': {
-        const { collision, normal, overlapDepth, contactPoints, edgeA, edgeB } =
-          Collision.detectPillToPill(bodyA, bodyB);
-        if (collision)
-          manifold = { normal, overlapDepth, contactPoints, edgeA, edgeB };
+      case "pill-pill": {
+        const manifold = Collision.detectPillToPill(bodyA, bodyB);
+
+        return manifold.collision ? manifold : null;
         break;
       }
     }
-
-    return manifold;
   }
 }

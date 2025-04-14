@@ -1,4 +1,4 @@
-import * as Physics from './physics/index.js';
+import * as Physics from "./physics/index.js";
 
 onload = function main() {
   const Engine = Physics.Engine;
@@ -8,8 +8,8 @@ onload = function main() {
   const timeInterval = 1000 / targetFPS;
   let timeAccumulator = 0;
 
-  const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
+  const canvas = document.getElementById("canvas");
+  const ctx = canvas.getContext("2d");
   let canvasWidth = innerWidth;
   let canvasHeight = innerHeight;
   const pixelRatio = 1 || devicePixelRatio;
@@ -19,27 +19,26 @@ onload = function main() {
   const maxSize = 40;
   const minSize = 30;
   let wireframe = true;
-  const restitution = 0.0;
+  const restitution = 0.9;
   const solverIterations = 4;
   const engine = new Engine({
-    wireframe,
     solverIterations,
     gravity: 9.81,
+    removeOffBound: true,
     bound: {
       x: -maxSize,
       y: -maxSize,
       width: canvasWidth + maxSize,
       height: canvasHeight + maxSize,
       scale: canvasWidth > canvasHeight ? maxSize * 2 : maxSize
-    },
-    removeOffBound: true
+    }
   });
 
   // Set canvas resolution
   canvas.width = canvasWidth * pixelRatio;
   canvas.height = canvasHeight * pixelRatio;
-  canvas.style.width = canvasWidth + 'px';
-  canvas.style.height = canvasHeight + 'px';
+  canvas.style.width = canvasWidth + "px";
+  canvas.style.height = canvasHeight + "px";
   ctx.scale(pixelRatio, pixelRatio);
 
   function clamp(value, min = 0, max = 1) {
@@ -60,36 +59,36 @@ onload = function main() {
   /**
    * User Interaction
    */
-  canvas.addEventListener('touchstart', event => {
+  canvas.addEventListener("touchstart", event => {
     event.preventDefault();
     handleMouseDown(event.touches[0].clientX, event.touches[0].clientY);
   });
 
-  canvas.addEventListener('touchend', event => {
+  canvas.addEventListener("touchend", event => {
     event.preventDefault();
     handleMouseUp(event.offsetX, event.offsetY);
   });
 
   canvas.addEventListener(
-    'touchmove',
+    "touchmove",
     throttle(event => {
       event.preventDefault();
       handleMouseMove(event.touches[0].clientX, event.touches[0].clientY);
     }, 1000 / 30)
   );
 
-  canvas.addEventListener('mousedown', event => {
+  canvas.addEventListener("mousedown", event => {
     event.preventDefault();
     handleMouseDown(event.offsetX, event.offsetY);
   });
 
-  canvas.addEventListener('mouseup', event => {
+  canvas.addEventListener("mouseup", event => {
     event.preventDefault();
     handleMouseUp(event.offsetX, event.offsetY);
   });
 
   canvas.addEventListener(
-    'mousemove',
+    "mousemove",
     throttle(event => {
       event.preventDefault();
       handleMouseMove(event.offsetX, event.offsetY);
@@ -114,8 +113,8 @@ onload = function main() {
     const y = clamp(mouse.y, randomSize, canvasHeight - randomSize);
     const option = {
       wireframe,
-      restitution,
-      color: '#c3945c'
+      restitution
+      //color: "#c3945c"
     };
     const body = new Bodies.rectangle(x, y, maxSize, maxSize, option);
 
@@ -131,7 +130,7 @@ onload = function main() {
         x: mouse.x - selectedBody.position.x,
         y: mouse.y - selectedBody.position.y
       };
-      selectedBody.translate(offset);
+      selectedBody.translate(offset, 0.6);
       if (!selectedBody.isStatic) selectedBody.linearVelocity.add(offset, 0.01);
       return;
     }
@@ -161,11 +160,11 @@ onload = function main() {
     };
 
     if (Math.random() - 0.5 < 0) {
-      option.color = '#eb8014';
+      // option.color = "#eb8014";
       body = new Bodies.circle(x, y, randomSize * 0.6, option);
     } else {
       if (Math.random() - 0.5 < 0) {
-        option.color = '#2086b3';
+        // option.color = "#2086b3";
         body = new Bodies.pill(
           x,
           y,
@@ -174,7 +173,7 @@ onload = function main() {
           option
         );
       } else {
-        option.color = '#898989';
+        // option.color = "#898989";
         body = new Bodies.polygon(vertices, option);
       }
     }
@@ -190,17 +189,18 @@ onload = function main() {
 
   function init() {
     // Create static bodies
-    const color = '#4e3546';
-    const ground = new Bodies.rectangle(
-      canvasWidth * 0.45,
-      canvasHeight * 0.9,
-      canvasWidth * 0.6,
-      100,
+    const color = "#4e3546";
+    const ground = new Bodies.pill(
+      canvasWidth * 0.5,
+      canvasHeight * 1.0,
+      20,
+      canvasWidth * 2,
       {
         isStatic: true,
         wireframe,
         rotation: false,
-        color
+        color: "#838383",
+        restitution
       }
     );
     rotatingObstacle1 = new Bodies.pill(
@@ -212,7 +212,8 @@ onload = function main() {
         isStatic: true,
         wireframe,
         rotation: true,
-        color
+        // color,
+        restitution
       }
     );
     const bigwall = new Bodies.rectangle(
@@ -224,33 +225,40 @@ onload = function main() {
         isStatic: true,
         wireframe,
         rotation: false,
-        color
+        // color,
+        restitution
       }
     );
 
+    ground.rotate(Math.PI * 0.5);
     rotatingObstacle1.rotate(Math.PI * 0.5);
-    bigwall.rotate(-Math.PI / 8);
-    // bigwall.roundCorner(20);
+    bigwall.rotate(Math.PI / 1.2);
+    // bigwall.roundCorner(40); // Does not recomended
 
-    engine.world.addBodies([ground, rotatingObstacle1, bigwall]);
+    engine.world.addBodies([ground]);
   }
 
   init();
 
   function spawner() {
+    setTimeout(() => {
+      spawner();
+    }, 1000 / 4);
+
     let body = null;
     const randomSize = Math.random() * (maxSize - minSize) + minSize;
-    const x = clamp(canvasWidth * 0.25, maxSize, canvasWidth - maxSize);
-    const y = clamp(canvasHeight * 0.35, 0, canvasHeight - maxSize);
+    const x = clamp(canvasWidth * 0.5, maxSize, canvasWidth - maxSize);
+    const y = clamp(canvasHeight * 0.1, 0, canvasHeight - maxSize);
     const vertices = [];
-    const edgeCount = Math.floor(Math.random() * (20 - 12) + 12);
+    const edgeCount = Math.floor(Math.random() * (16 - 3) + 3);
 
     for (let i = 0; i < edgeCount; i++) {
       const angle = (i * Math.PI * 2) / edgeCount;
+      const radius = Math.random() * (maxSize - minSize) + minSize;
 
       vertices.push({
-        x: x + randomSize * 0.7 * Math.cos(angle),
-        y: y + randomSize * 0.7 * Math.sin(angle)
+        x: x + radius * 0.7 * Math.cos(angle),
+        y: y + radius * 0.7 * Math.sin(angle)
       });
     }
 
@@ -259,10 +267,10 @@ onload = function main() {
       restitution
     };
 
-    if (false && Math.random() - 0.5 < 0) {
+    if (Math.random() - 0.5 < 0) {
       body = new Bodies.circle(x, y, maxSize * 0.5, option);
     } else {
-      if (false && Math.random() - 0.5 < 0) {
+      if (Math.random() - 0.5 < 0) {
         body = new Bodies.pill(x, y, maxSize * 0.35, maxSize * 0.8, option);
       } else {
         body = new Bodies.polygon(vertices, option);
@@ -270,10 +278,6 @@ onload = function main() {
     }
 
     engine.world.addBody(body);
-
-    setTimeout(() => {
-      spawner();
-    }, 1000);
   }
 
   // spawner();
@@ -289,7 +293,7 @@ onload = function main() {
       // body.renderContacts(ctx);
     });
 
-    ctx.fillStyle = 'white';
+    ctx.fillStyle = "white";
     ctx.font = `normal ${fontSize}px Arial`;
     ctx.fillText(
       `${Math.round(1000 / update.deltaTime || 0)} fps`,
@@ -318,7 +322,6 @@ onload = function main() {
 
       renderSimulation(ctx);
       engine.run(update.deltaTime);
-      // rotatingObstacle1.angularVelocity = 0.005
     }
 
     requestAnimationFrame(update);

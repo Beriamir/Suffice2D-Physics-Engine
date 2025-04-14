@@ -12,9 +12,10 @@ export class Bnd2 {
   }
 
   update() {
+    const radius = this.body.radius;
+
     this.min.set(Infinity, Infinity);
     this.max.set(-Infinity, -Infinity);
-    const radius = this.body.radius;
 
     switch (this.body.label) {
       case 'circle':

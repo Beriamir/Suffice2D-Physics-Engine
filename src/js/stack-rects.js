@@ -14,12 +14,13 @@ onload = function main() {
   let timeAccumulator = 0;
   const mouse = { x: canvasWidth / 2, y: canvasHeight / 2 };
 
-  const minSize = 20;
-  const maxSize = 25;
+  const minSize = 40;
+  const maxSize = 50;
   let wireframe = true;
   const restitution = 0.9;
   const solverIterations = 4;
   const engine = new Engine({
+    wireframe,
     solverIterations,
     gravity: 9.81,
     bound: {
@@ -91,7 +92,7 @@ onload = function main() {
       wireframe,
       restitution
     };
-    const body = new Bodies.circle(x, y, randomSize, option);
+    const body = new Bodies.rectangle(x, y, randomSize, randomSize, option);
 
     engine.world.addBody(body);
   }
@@ -181,7 +182,8 @@ onload = function main() {
         isStatic: true,
         wireframe,
         rotation: true,
-        color: color
+        color: color,
+        restitution
       }
     );
 
@@ -208,7 +210,11 @@ onload = function main() {
       fontSize,
       fontSize * 2
     );
-    ctx.fillText(`${engine.world.collections.length} bodies`, fontSize, fontSize * 3);
+    ctx.fillText(
+      `${engine.world.collections.length} bodies`,
+      fontSize,
+      fontSize * 3
+    );
     ctx.fillText(`${solverIterations} subSteps`, fontSize, fontSize * 4);
   }
 

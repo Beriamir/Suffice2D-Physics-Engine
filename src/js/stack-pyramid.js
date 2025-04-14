@@ -2,7 +2,6 @@ import * as Physics from './physics/index.js';
 
 onload = function main() {
   const Engine = Physics.Engine;
-  const Composite = Physics.Composite;
   const Bodies = Physics.Bodies;
 
   const canvas = document.getElementById('canvas');
@@ -19,10 +18,10 @@ onload = function main() {
   const maxSize = 25;
   let wireframe = true;
   const restitution = 0.9;
-  const subSteps = 4;
+  const solverIterations = 4;
   const engine = new Engine({
     wireframe,
-    subSteps,
+    solverIterations,
     gravity: 9.81,
     boundary: {
       x: 0,
@@ -95,12 +94,12 @@ onload = function main() {
     };
     const body = new Bodies.circle(x, y, randomSize, option);
 
-    Composite.add(engine, body);
+    engine.world.addBody(body);
   }
 
   function generatePyramid() {
     const boxSize = 40;
-    const iterations = 10;
+    const iterations = 6;
     const offset = canvasHeight * 0.864 - iterations * boxSize;
 
     for (let i = 0; i < iterations; i++) {
@@ -117,7 +116,8 @@ onload = function main() {
             wireframe
           }
         );
-        Composite.add(engine, box);
+
+        engine.world.addBody(box);
       }
     }
   }
@@ -128,7 +128,7 @@ onload = function main() {
       canvasWidth * 0.5,
       canvasHeight * 0.9,
       10,
-      canvasWidth * 0.7,
+      canvasWidth * 4,
       {
         isStatic: true,
         wireframe,
@@ -138,7 +138,7 @@ onload = function main() {
     );
 
     ground.rotate(-Math.PI / 2);
-    Composite.add(engine, ground);
+    engine.world.addBody(ground);
 
     generatePyramid();
   }
@@ -149,7 +149,7 @@ onload = function main() {
     const fontSize = 12;
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-    engine.world.forEach(body => body.render(ctx));
+    engine.world.collections.forEach(body => body.render(ctx));
 
     ctx.fillStyle = 'white';
     ctx.font = 'normal 12px Arial';
@@ -158,8 +158,8 @@ onload = function main() {
       fontSize,
       fontSize * 2
     );
-    ctx.fillText(`${engine.world.length} bodies`, fontSize, fontSize * 3);
-    ctx.fillText(`${subSteps} subSteps`, fontSize, fontSize * 4);
+    ctx.fillText(`${engine.world.collections.length} bodies`, fontSize, fontSize * 3);
+    ctx.fillText(`${solverIterations} subSteps`, fontSize, fontSize * 4);
   }
 
   function update(timeStamp) {

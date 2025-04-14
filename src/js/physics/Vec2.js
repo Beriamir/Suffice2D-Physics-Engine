@@ -46,11 +46,15 @@ export class Vec2 {
     const cos = Math.cos(angle)
     const sin = Math.sin(angle)
 
-    return new Vec2(this.x * cos - this.y * sin, this.x * sin + this.y * cos)
+    return new Vec2(
+      this.x * cos - this.y * sin, 
+      this.x * sin + this.y * cos
+    )
   }
 
   equal(v) {
-    return Vec2.distanceSq(this, v) <= 5e-4 * 5e-4
+    const epsilon = 5e-4
+    return Vec2.distanceSq(this, v) <= epsilon ** 2
   }
 
   string() {

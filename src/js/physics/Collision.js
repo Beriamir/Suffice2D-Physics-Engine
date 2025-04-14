@@ -1,20 +1,6 @@
 import { Vec2 } from './Vec2.js';
 
 export class Collision {
-  static _getNormals(vertices) {
-    const normals = [];
-
-    for (let i = 0; i < vertices.length; ++i) {
-      const currVertex = vertices[i];
-      const nextVertex = vertices[(i + 1) % vertices.length];
-      const edge = Vec2.subtract(nextVertex, currVertex);
-      const normal = edge.perp().normalize();
-
-      normals.push(normal);
-    }
-
-    return normals;
-  }
   static _getClosestContactPointInEdges(edges, targetPoint) {
     let minDistanceSq = Infinity;
     const closestPoint = new Vec2();
@@ -288,7 +274,7 @@ export class Collision {
             point
           );
 
-          if (Math.abs(distanceSq - minDistanceSq) < 5e-4) {
+          if (Math.abs(distanceSq - minDistanceSq) < 1e-6) {
             if (!contactPoint.equal(contactPoint1)) {
               minDistanceSq = distanceSq;
               contactPoint2.copy(contactPoint);

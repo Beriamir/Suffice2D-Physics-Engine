@@ -17,7 +17,7 @@ export class Vertices {
   static inertia(vertices, mass) {
     let numerator = 0;
     let denominator = 0;
-    const centroid = this.mean(vertices);
+    const centroid = this.centroid(vertices);
     const newVertices = vertices.map(vertex =>
       vertex.clone().subtract(centroid)
     );
