@@ -246,8 +246,8 @@ export class Body {
     if (!this.wireframe) {
       ctx.fillStyle = this.color;
       ctx.fill();
-      ctx.strokeStyle = '#ffffffc0';
-      ctx.stroke();
+      // ctx.strokeStyle = '#ffffffc0';
+      // ctx.stroke();
     } else {
       ctx.strokeStyle = this.isSleeping ? '#ffffff50' : '#ffffffc0';
       ctx.stroke();

@@ -125,6 +125,9 @@ export class SpatialGrid {
   }
 
   render(ctx) {
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(this.bound[0], this.bound[1], this.bound[2], this.bound[3]);
+    
     ctx.strokeStyle = '#ffffff47';
     ctx.fillStyle = '#f9000023';
     ctx.beginPath();

@@ -358,6 +358,20 @@ onload = function main() {
       fontSize,
       fontSize * 2
     );
+    ctx.fillText(
+      `
+        > Beriamir -- beriamirdev@gmail.com
+      `,
+      fontSize,
+      fontSize * 3.5
+    );
+    ctx.fillText(
+      `
+        > Suffice2D Physics Engine 
+      `,
+      fontSize,
+      fontSize * 5
+    );
   }
 
   function update(timeStamp) {

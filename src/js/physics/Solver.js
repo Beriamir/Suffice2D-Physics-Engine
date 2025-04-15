@@ -34,9 +34,9 @@ export class Solver {
     const vImpulse = [];
     const wImpulse = [];
 
-    const biasScale = 0.02;
+    const biasFactor = 0.02;
     const biasSlop = 0.8;
-    const impulseBias = this._clamp(overlap - biasSlop, 0, 1) * biasScale;
+    const impulseBias = this._clamp(overlap - biasSlop, 0, 1) * biasFactor;
 
     const restitution = Math.min(bodyA.restitution, bodyB.restitution);
     const staticFriction = Math.min(
