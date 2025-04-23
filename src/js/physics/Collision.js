@@ -274,7 +274,7 @@ export class Collision {
             point
           );
 
-          if (Math.abs(distanceSq - minDistanceSq) < 1e-6) {
+          if (Math.abs(distanceSq - minDistanceSq) < 5e-3) {
             if (!contactPoint.equal(contactPoint1)) {
               minDistanceSq = distanceSq;
               contactPoint2.copy(contactPoint);
@@ -310,7 +310,7 @@ export class Collision {
     };
   }
 
-  static detectPolygonToPill(bodyA, bodyB) {
+  static detectPolygonToCapsule(bodyA, bodyB) {
     const normal = new Vec2();
     let overlapDepth = Infinity;
     const direction = Vec2.subtract(bodyB.position, bodyA.position);
@@ -388,7 +388,7 @@ export class Collision {
             point
           );
 
-          if (Math.abs(distanceSq - minDistanceSq) <= 5e-4) {
+          if (Math.abs(distanceSq - minDistanceSq) < 5e-3) {
             if (!contactPoint.equal(contactPoint1)) {
               contactPoint2.copy(contactPoint);
               contactCounts = 2;
@@ -433,7 +433,7 @@ export class Collision {
     };
   }
 
-  static detectPillToPill(bodyA, bodyB) {
+  static detectCapsuleToCapsule(bodyA, bodyB) {
     const normal = new Vec2();
     let overlapDepth = Infinity;
     const edgeA = [bodyA.startPoint, bodyA.endPoint];
@@ -531,7 +531,7 @@ export class Collision {
     };
   }
 
-  static detectCircleToPill(bodyA, bodyB) {
+  static detectCircleToCapsule(bodyA, bodyB) {
     const edgeB = [bodyB.startPoint, bodyB.endPoint];
     const { contactPoint: pointB } = this._getPointInLineSegment(
       edgeB[0],

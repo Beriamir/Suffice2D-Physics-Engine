@@ -49,35 +49,28 @@ export class Body {
     if (this.endPoint) this.allVertices.push(this.endPoint);
     if (this.vertices) this.allVertices.push(...this.vertices);
 
-    this.linearVelocity = new Vec2().copy(
-      option.linearVelocity || { x: 0, y: 0 }
-    );
-    this.angularVelocity = option.angularVelocity || 0;
+    this.linearVelocity = option.linearVelocity ?? new Vec2();
+    this.angularVelocity = option.angularVelocity ?? 0;
 
     let defaultFriction = null;
     switch (this.label) {
       case 'circle':
-        defaultFriction = { static: 0.8, kinetic: 0.7 };
+        defaultFriction = { static: 0.6, kinetic: 0.4 };
         break;
 
       case 'rectangle':
       case 'polygon':
-        defaultFriction = { static: 0.9, kinetic: 0.8 };
+        defaultFriction = { static: 0.8, kinetic: 0.7 };
         break;
 
-      case 'pill':
+      case 'capsule':
         defaultFriction = { static: 0.7, kinetic: 0.6 };
         break;
     }
-    this.friction = option.friction || defaultFriction;
-    this.restitution =
-      option.restitution == undefined
-        ? 0.9
-        : option.restitution && typeof option.restitution != 'number'
-        ? 0.9
-        : option.restitution;
-    this.density = option.density || 2700;
-    this.thickness = option.thickness || 0.01;
+    this.friction = option.friction ?? defaultFriction;
+    this.restitution = option.restitution ?? 0.9;
+    this.density = option.density ?? 2700;
+    this.thickness = option.thickness ?? 0.01;
 
     switch (this.label) {
       case 'circle':
@@ -87,7 +80,7 @@ export class Body {
       case 'polygon':
         this.area = Vertices.area(this.vertices);
         break;
-      case 'pill':
+      case 'capsule':
         this.area =
           this.radius * this.radius * Math.PI + Vertices.area(this.vertices);
         break;
@@ -117,7 +110,7 @@ export class Body {
         break;
       }
 
-      case 'pill': {
+      case 'capsule': {
         const radiusSq = this.radius ** 2;
         const rectInertia =
           0.0833333333 *
@@ -138,38 +131,40 @@ export class Body {
     this.inverseMass = 1 / this.mass;
     this.inverseInertia = 1 / this.inertia;
 
-    this.wireframe =
-      option.wireframe == undefined
-        ? false
-        : option.wireframe && typeof option.wireframe != 'boolean'
-        ? false
-        : option.wireframe;
-
-    this.rotation =
-      option.rotation == undefined
-        ? true
-        : typeof option.rotation != 'boolean'
-        ? true
-        : option.rotation;
-    this.isStatic = option.isStatic || false;
-    this.color = option.color || `hsla(${Math.random() * 360}, 100%, 50%, 70%)`;
+    this.wireframe = option.wireframe ?? false;
+    this.rotation = option.rotation ?? true;
+    this.isStatic = option.isStatic ?? false;
+    this.color = option.color ?? `hsla(${Math.random() * 360}, 100%, 50%, 70%)`;
 
     if (this.isStatic) {
       this.inverseMass = 0;
-      this.color = option.color || 'hsla(0,0%,51.4%,70%)';
+      this.restitution = option.restitution ?? 1;
+      this.color = option.color ?? 'hsla(0,0%,51.4%,70%)';
     }
 
-    if (!this.rotation) this.inverseInertia = 0;
+    if (!this.rotation) {
+      this.inverseInertia = 0;
+    }
 
     this.bound = new Bnd2(this);
     this.contactPoints = [];
     this.edges = [];
   }
 
-  addForce(offset, scalar = 1) {
+  setPosition(x, y) {
     this.prevPosition.copy(this.position);
-    this.position.add(offset, scalar);
-    this.allVertices.forEach(point => point.add(offset, scalar));
+    this.position.set(x, y);
+
+    const offset = Vec2.subtract(this.position, this.prevPosition);
+
+    this.allVertices.forEach(point => point.add(offset));
+    this.bound.update();
+  }
+
+  addForce(force, scalar = 1) {
+    this.prevPosition.copy(this.position);
+    this.position.add(force, scalar);
+    this.allVertices.forEach(point => point.add(force, scalar));
 
     this.bound.update();
   }
@@ -194,6 +189,46 @@ export class Body {
     }
   }
 
+  furthestPointInDir(direction) {
+    const maxPoint = new Vec2();
+
+    if (this.label == 'rectangle' || this.label == 'polygon') {
+      let maxDistance = -Infinity;
+
+      for (let i = 0; i < this.vertices.length; i++) {
+        const vertex = this.vertices[i];
+        const distance = vertex.dot(direction);
+
+        if (distance > maxDistance) {
+          maxDistance = distance;
+          maxPoint.copy(vertex);
+        }
+      }
+    } else if (this.label == 'circle') {
+      maxPoint.copy(
+        Vec2.add(this.position, Vec2.scale(direction, this.radius))
+      );
+    } else if (this.label == 'capsule') {
+      maxPoint.copy(this.position).add(Vec2.scale(direction, this.radius * 2));
+
+      const ab = Vec2.subtract(this.endPoint, this.startPoint);
+      const ap = Vec2.subtract(maxPoint, this.startPoint);
+      const abLengthSq = ab.magnitudeSq();
+      const projection = ap.dot(ab) / abLengthSq;
+      const contactPoint = ab.scale(projection).add(this.startPoint);
+
+      if (projection < 0) {
+        contactPoint.copy(this.startPoint);
+      } else if (projection > 1) {
+        contactPoint.copy(this.endPoint);
+      }
+
+      maxPoint.copy(contactPoint).add(direction, this.radius);
+    }
+
+    return maxPoint;
+  }
+
   render(ctx) {
     ctx.beginPath();
     switch (this.label) {
@@ -210,7 +245,7 @@ export class Body {
         break;
       }
 
-      case 'pill': {
+      case 'capsule': {
         const startDir = Vec2.subtract(this.vertices[0], this.startPoint);
         const endDir = Vec2.subtract(this.vertices[1], this.startPoint);
         const startAngle = Math.atan2(startDir.y, startDir.x);
@@ -283,8 +318,8 @@ export class Body {
           break;
         }
 
-        // Pill Edge
-        case 'pill': {
+        // capsule Edge
+        case 'capsule': {
           let edge = null;
           const ab = Vec2.subtract(this.endPoint, this.startPoint);
           const ap = Vec2.subtract(point, this.startPoint);

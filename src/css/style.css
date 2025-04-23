@@ -14,7 +14,7 @@ body {
 }
 
 .canvas {
-  background: #001122;
+  background: #161616;
   position: absolute;
 }
 
@@ -37,6 +37,7 @@ body {
   bottom: 2rem;
   right: 2rem;
   z-index: 1;
+  visibility: hidden;
 }
 
 button.shape-type {

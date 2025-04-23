@@ -35,7 +35,7 @@ export class Bnd2 {
         });
         break;
 
-      case 'pill':
+      case 'capsule':
         for (const vertex of [this.body.startPoint, this.body.endPoint]) {
           if (vertex.x - radius < this.min.x) this.min.x = vertex.x - radius;
           if (vertex.y - radius < this.min.y) this.min.y = vertex.y - radius;

@@ -49,7 +49,7 @@ export class World {
   }
 
   render(ctx) {
-    this.world.collections.forEach(body => {
+    this.collections.forEach(body => {
       body.bound.render(ctx);
       body.render(ctx);
       body.renderContacts(ctx);

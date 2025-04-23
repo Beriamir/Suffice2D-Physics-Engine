@@ -58,16 +58,16 @@ export class SpatialGrid {
         const index = this._index(x, y);
         const cell = this.grid[index];
 
-        cell.forEach((cellClient, i) => {
-          if (cellClient === client) {
-            const temp = cellClient;
+        for (let i = 0; i < cell.length; ++i) {
+          if (cell[i] === client) {
             const last = cell.length - 1;
+            const temp = cell[i];
 
             cell[i] = cell[last];
             cell[last] = temp;
             cell.pop();
           }
-        });
+        }
       }
     }
   }
@@ -112,12 +112,17 @@ export class SpatialGrid {
         const index = this._index(x, y);
         const cell = this.grid[index];
 
-        cell.forEach(neighbor => {
-          if (neighbor.queryId != queryId) {
+        for (let i = 0; i < cell.length; ++i) {
+          const neighbor = cell[i];
+
+          if (
+            neighbor.queryId != queryId &&
+            neighbor.bound.overlaps(client.bound)
+          ) {
             neighbor.queryId = queryId;
             neighbors.push(neighbor);
           }
-        });
+        }
       }
     }
 
@@ -125,22 +130,26 @@ export class SpatialGrid {
   }
 
   render(ctx) {
+    const [x0, y0, width, height] = this.bound;
+
     ctx.fillStyle = '#000000';
-    ctx.fillRect(this.bound[0], this.bound[1], this.bound[2], this.bound[3]);
-    
+    ctx.fillRect(x0, y0, width, height);
+
     ctx.strokeStyle = '#ffffff47';
-    ctx.fillStyle = '#f9000023';
     ctx.beginPath();
     for (let x = 0; x <= this.columns; ++x) {
-      ctx.moveTo(x * this.scale, 0);
-      ctx.lineTo(x * this.scale, this.bound[3]);
+      const gx = x0 + x * this.scale;
+      ctx.moveTo(gx, y0);
+      ctx.lineTo(gx, y0 + height);
     }
     for (let y = 0; y <= this.rows; ++y) {
-      ctx.moveTo(0, y * this.scale);
-      ctx.lineTo(this.bound[2], y * this.scale);
+      const gy = y0 + y * this.scale;
+      ctx.moveTo(x0, gy);
+      ctx.lineTo(x0 + width, gy);
     }
     ctx.stroke();
 
+    ctx.fillStyle = '#8708082e';
     for (let i = 0; i < this.grid.length; ++i) {
       if (this.grid[i].length > 0) {
         const x = i % this.columns;

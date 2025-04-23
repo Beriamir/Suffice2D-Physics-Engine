@@ -1,6 +1,6 @@
-import { Body } from './Body.js'
-import { Vertices } from './Vertices.js'
-import { Vec2 } from './Vec2.js'
+import { Body } from './Body.js';
+import { Vertices } from './Vertices.js';
+import { Vec2 } from './Vec2.js';
 
 export const Bodies = {
   circle: function (x, y, radius, option = {}) {
@@ -12,8 +12,8 @@ export const Bodies = {
           radius: Number
           option: {}
         )
-      `)
-      throw `Body's option must be of type object!`
+      `);
+      throw `Body's option must be of type object!`;
     }
 
     const properties = {
@@ -22,9 +22,9 @@ export const Bodies = {
       position: new Vec2(x, y),
       axisPoint: new Vec2(x + radius, y),
       radius: radius
-    }
+    };
 
-    return new Body(properties, option)
+    return new Body(properties, option);
   },
 
   rectangle: function (x, y, width, height, option = {}) {
@@ -37,8 +37,8 @@ export const Bodies = {
           height: Number,
           option: {}
         )
-      `)
-      throw `Body's option must be of type object!`
+      `);
+      throw `Body's option must be of type object!`;
     }
 
     const vertices = [
@@ -46,7 +46,7 @@ export const Bodies = {
       new Vec2(x + width * 0.5, y - height * 0.5),
       new Vec2(x + width * 0.5, y + height * 0.5),
       new Vec2(x - width * 0.5, y + height * 0.5)
-    ]
+    ];
 
     const properties = {
       label: 'rectangle',
@@ -63,23 +63,23 @@ export const Bodies = {
       vertices: vertices,
       width: width,
       height: height
-    }
+    };
 
-    return new Body(properties, option)
+    return new Body(properties, option);
   },
 
-  pill: function (x, y, radius, height, option = {}) {
+  capsule: function (x, y, radius, height, option = {}) {
     if (typeof option != 'object') {
       console.warn(`
-        Bodies.pill( 
+        Bodies.capsule( 
           x: Number, 
           y: Number, 
           radius: Number,
           height: Number
           option: {}
         )
-      `)
-      throw `Body's option must be of type object!`
+      `);
+      throw `Body's option must be of type object!`;
     }
 
     const vertices = [
@@ -87,10 +87,10 @@ export const Bodies = {
       new Vec2(x + radius, y - height * 0.5),
       new Vec2(x + radius, y + height * 0.5),
       new Vec2(x - radius, y + height * 0.5)
-    ]
+    ];
 
     const properties = {
-      label: 'pill',
+      label: 'capsule',
       type: 'rigid',
       position: new Vec2(x, y),
       startPoint: new Vec2(x, y - height * 0.5),
@@ -98,9 +98,9 @@ export const Bodies = {
       vertices: vertices,
       radius: radius,
       height: height
-    }
+    };
 
-    return new Body(properties, option)
+    return new Body(properties, option);
   },
 
   polygon: function (vertices = [], option = {}) {
@@ -110,23 +110,23 @@ export const Bodies = {
           vertices: [{x, y}]
           option: {}
         )
-      `)
-      throw `Body's option must be of type object!`
+      `);
+      throw `Body's option must be of type object!`;
     }
 
     if (vertices.length < 3)
-      throw `Polygon's body expects atleast 3 or more vertices!`
+      throw `Polygon's body expects atleast 3 or more vertices!`;
 
     if (!Vertices.isConvex(vertices)) {
-      console.warn('Please provide a valid shape.')
-      throw `Currently the engine doesn't support a concave polygon!`
+      console.warn('Please provide a valid shape.');
+      throw `Currently the engine doesn't support a concave polygon!`;
     }
 
-    vertices = vertices.map(point => new Vec2(point.x, point.y))
+    vertices = vertices.map(point => new Vec2(point.x, point.y));
 
-    const centroid = Vertices.centroid(vertices)
-    const direction = Vec2.subtract(vertices[0], centroid)
-    const axisPoint = Vec2.add(centroid, direction)
+    const centroid = Vertices.centroid(vertices);
+    const direction = Vec2.subtract(vertices[0], centroid);
+    const axisPoint = Vec2.add(centroid, direction);
     const properties = {
       label: 'polygon',
       type: 'rigid',
@@ -134,9 +134,9 @@ export const Bodies = {
       axisPoint: axisPoint,
       vertices: vertices,
       radius: Math.abs(direction.x)
-    }
+    };
 
-    return new Body(properties, option)
+    return new Body(properties, option);
   },
 
   log: function () {
@@ -156,7 +156,7 @@ export const Bodies = {
         option: {}
       )
       
-      Bodies.pill( 
+      Bodies.capsule( 
         x: Number, 
         y: Number, 
         radius: Number,
@@ -168,6 +168,6 @@ export const Bodies = {
         vertices: [{x, y}]
         option: {}
       )
-    `)
+    `);
   }
-}
+};
