@@ -18,7 +18,7 @@ onload = function main() {
   const maxSize = 25;
   let wireframe = true;
   const restitution = 0.9;
-  const subSteps = 4;
+  const subSteps = 8;
   const engine = new Engine({
     subSteps,
     gravity: 9.81,
@@ -98,7 +98,7 @@ onload = function main() {
 
   function generatePyramid() {
     const boxSize = 40;
-    const iterations = 8;
+    const iterations = 10;
     const offset = canvasHeight * 0.864 - iterations * boxSize;
 
     for (let i = 0; i < iterations; i++) {
@@ -126,7 +126,7 @@ onload = function main() {
       canvasWidth * 0.5,
       canvasHeight * 0.9,
       10,
-      canvasWidth * 4,
+      canvasWidth * 2,
       {
         isStatic: true,
         wireframe: false,

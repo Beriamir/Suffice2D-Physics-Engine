@@ -177,7 +177,7 @@ export class Collision {
 
     for (let i = 0; i < n - 1; ++i) {
       const currPoint = edges[i];
-      const nextPoint = edges[(i + 1) % n];
+      const nextPoint = edges[i + 1];
 
       const { contactPoint, distanceSq } = this._getPointInLineSegment(
         currPoint,
@@ -262,12 +262,12 @@ export class Collision {
     let minDistanceSq = Infinity;
 
     function _checkForContactPoints(points, vertices) {
-      let n = vertices.length;
+      for (let i = 0; i < points.length; ++i) {
+        const point = points[i];
 
-      points.forEach(point => {
-        for (let i = 0; i < n - 1; ++i) {
-          const currPoint = vertices[i];
-          const nextPoint = vertices[i + 1];
+        for (let j = 0; j < vertices.length - 1; ++j) {
+          const currPoint = vertices[j];
+          const nextPoint = vertices[j + 1];
           const { contactPoint, distanceSq } = Collision._getPointInLineSegment(
             currPoint,
             nextPoint,
@@ -286,7 +286,7 @@ export class Collision {
             contactCounts = 1;
           }
         }
-      });
+      }
     }
 
     _checkForContactPoints(edgeA, edgeB);
@@ -375,12 +375,12 @@ export class Collision {
     let minDistanceSq = Infinity;
 
     function _checkForContactPoints(points, vertices) {
-      const n = vertices.length;
+      for (let i = 0; i < points.length; ++i) {
+        const point = points[i];
 
-      points.forEach(point => {
-        for (let i = 0; i < n - 1; ++i) {
-          const currPoint = vertices[i];
-          const nextPoint = vertices[(i + 1) % n];
+        for (let j = 0; j < vertices.length - 1; ++j) {
+          const currPoint = vertices[j];
+          const nextPoint = vertices[j + 1];
 
           const { contactPoint, distanceSq } = Collision._getPointInLineSegment(
             currPoint,
@@ -399,7 +399,7 @@ export class Collision {
             contactCounts = 1;
           }
         }
-      });
+      }
     }
 
     _checkForContactPoints(edgeA, edgeB);

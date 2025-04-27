@@ -92,7 +92,9 @@ export class Engine {
         for (const bodyB of nearby) {
           const manifold = this._detectCollision(bodyA, bodyB);
 
-          if (manifold) Solver.solveCollision(bodyA, bodyB, manifold);
+          if (manifold) {
+            Solver.solveCollision(bodyA, bodyB, manifold);
+          }
         }
       }
     }

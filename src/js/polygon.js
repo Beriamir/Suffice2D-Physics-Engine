@@ -1,22 +1,21 @@
 import * as Physics from './physics/index.js';
 
-const targetFPS = 60;
 let canvasWidth = innerWidth;
 let canvasHeight = innerHeight;
 const mouse = new Physics.Vec2(canvasWidth / 2, canvasHeight / 2);
 
+const bodySize = 40;
 let wireframe = false;
 let showGrid = false;
-let renderDebug = false;
+let renderDebug = true;
 let restitution = 0.9;
 let subSteps = 4;
 let gravity = 9.81;
-const bodySize = 40;
 
 const engine = new Physics.Engine({
-  targetFPS,
   subSteps,
   gravity,
+  targetFPS: 60,
   velocityDamp: 0.999,
   removeOffBound: true,
   bound: {
@@ -29,10 +28,6 @@ const engine = new Physics.Engine({
 });
 const world = engine.world;
 const animator = engine.animator;
-
-const shapeTypes = ['circle', 'capsule', 'rectangle', 'polygon'];
-let shapeTypeIndex = 0;
-let shapeType = shapeTypes[shapeTypeIndex];
 
 function clamp(value, min = 0, max = 1) {
   return value > max ? max : value < min ? min : value;
@@ -51,10 +46,6 @@ function throttle(callback, delay) {
 
 document.addEventListener('DOMContentLoaded', function () {
   const canvas = document.getElementById('canvas');
-  const shapeTypeBtn = document.getElementById('shape-type');
-  const restartBtn = document.getElementById('restart');
-  const debugBtn = document.getElementById('debug');
-  const btns = document.querySelectorAll('.btn');
   const ctx = canvas.getContext('2d');
 
   canvas.width = canvasWidth;
@@ -62,21 +53,14 @@ document.addEventListener('DOMContentLoaded', function () {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  btns.forEach(btn => {
-    btn.style.visibility = 'visible';
-  });
-
   /**
    * Initialize
    */
   function init() {
     world.empty();
-    shapeTypeIndex = 0;
-    shapeType = shapeTypes[shapeTypeIndex];
-    shapeTypeBtn.innerText = shapeType + ' +';
-    wireframe = false;
+    wireframe = true;
     showGrid = false;
-    renderDebug = false;
+    renderDebug = true;
 
     const ground = new Physics.Bodies.rectangle(
       canvasWidth * 0.45,
@@ -125,14 +109,15 @@ document.addEventListener('DOMContentLoaded', function () {
    * Render
    */
   function renderSimulation(ctx, deltaTime) {
-    const fontSize = 12;
+    const fontSize = 14;
 
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
     if (showGrid) engine.renderGrid(ctx);
 
     world.collections.forEach(body => {
       body.render(ctx);
-      if (renderDebug) body.renderDebug(ctx);
+      // if (renderDebug) body.renderDebug(ctx);
+      body.renderContacts(ctx);
     });
 
     ctx.fillStyle = 'white';
@@ -145,13 +130,6 @@ document.addEventListener('DOMContentLoaded', function () {
       `,
       canvasWidth * 0.5,
       fontSize * 2
-    );
-    ctx.fillText(
-      `
-        > Suffice2D Physics Engine 
-      `,
-      canvasWidth * 0.5,
-      fontSize * 3.5
     );
   }
 
@@ -213,12 +191,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }, 60)
   );
 
-  shapeTypeBtn?.addEventListener('click', handleShapeTypeBtn);
-
-  restartBtn?.addEventListener('click', handleRestartButton);
-
-  debugBtn?.addEventListener('click', handleDebugButton);
-
   /**
    *
    *
@@ -247,87 +219,27 @@ document.addEventListener('DOMContentLoaded', function () {
       restitution
     };
 
-    switch (shapeType) {
-      case 'circle': {
-        const body = new Physics.Bodies.circle(
-          position.x,
-          position.y,
-          bodySize * 0.5,
-          option
-        );
+    const vertices = [];
+    const edgeCount = Math.floor(Math.random() * (9 - 3) + 3);
 
-        world.addBody(body);
-        break;
-      }
-      case 'capsule': {
-        const body = new Physics.Bodies.capsule(
-          position.x,
-          position.y,
-          bodySize * 0.5,
-          bodySize * 0.5,
-          option
-        );
+    for (let i = 0; i < edgeCount; ++i) {
+      const angle = (i * Math.PI * 2) / edgeCount;
+      const radius = bodySize * 0.7;
 
-        world.addBody(body);
-        break;
-      }
-      case 'polygon': {
-        const vertices = [];
-        const edgeCount = Math.floor(Math.random() * (9 - 3) + 3);
-
-        for (let i = 0; i < edgeCount; ++i) {
-          const angle = (i * Math.PI * 2) / edgeCount;
-          const radius = bodySize * 0.7;
-
-          vertices.push(
-            new Physics.Vec2(
-              position.x + radius * Math.cos(angle),
-              position.y + radius * Math.sin(angle)
-            )
-          );
-        }
-
-        const body = new Physics.Bodies.polygon(vertices, option);
-
-        world.addBody(body);
-        break;
-      }
-      case 'rectangle': {
-        const body = new Physics.Bodies.rectangle(
-          position.x,
-          position.y,
-          bodySize * 0.9,
-          bodySize * 1.1,
-          option
-        );
-
-        world.addBody(body);
-        break;
-      }
+      vertices.push(
+        new Physics.Vec2(
+          position.x + radius * Math.cos(angle),
+          position.y + radius * Math.sin(angle)
+        )
+      );
     }
+
+    const body = new Physics.Bodies.polygon(vertices, option);
+
+    world.addBody(body);
   }
 
   function handleMouseUp() {
     mouse.set(canvasWidth / 2, canvasHeight / 2);
-  }
-
-  function handleShapeTypeBtn() {
-    shapeTypeIndex++;
-    shapeType = shapeTypes[shapeTypeIndex % shapeTypes.length];
-    shapeTypeBtn.innerText = shapeType + ' +';
-  }
-
-  function handleRestartButton() {
-    init();
-  }
-
-  function handleDebugButton() {
-    showGrid = !showGrid;
-    renderDebug = !renderDebug;
-
-    engine.world.collections.forEach(body => {
-      wireframe = renderDebug ? true : false;
-      body.wireframe = wireframe;
-    });
   }
 });
