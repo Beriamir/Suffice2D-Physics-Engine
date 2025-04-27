@@ -14,13 +14,13 @@ body {
 }
 
 .canvas {
-  background: #161616;
+  background: #2f1e35;
   position: absolute;
 }
 
 .btn:hover,
 .btn:focus {
-  background-color: #025fcb;
+  background-color: #033672;
 }
 .btn {
   background-color: #0076ff;
