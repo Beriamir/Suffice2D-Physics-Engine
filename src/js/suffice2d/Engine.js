@@ -10,7 +10,6 @@ export class Engine {
     this.world = new World(this);
     this.animator = new Animator(option.targetFPS ?? 60);
     this.gravity = { x: 0, y: option.gravity ?? 9.81 };
-    this.velocityDamp = option.velocityDamp ?? 0.999;
     this.subSteps = option.subSteps ?? 4;
     this.removeOffBound = option.removeOffBound ?? false;
 
@@ -60,8 +59,6 @@ export class Engine {
         if (bodyA.rotation) bodyA.rotate(bodyA.angularVelocity * deltaTime);
 
         if (subStep == 1) {
-          bodyA.linearVelocity.scale(this.velocityDamp);
-          bodyA.angularVelocity *= this.velocityDamp;
           this.grid.updateData(bodyA);
 
           if (

@@ -5,5 +5,6 @@ import { Engine } from './Engine.js'
 import { Collision } from './Collision.js'
 import { Solver } from './Solver.js'
 import { Vertices } from './Vertices.js'
+import { Mouse } from './Mouse.js'
 
-export { Solver, Engine, Bodies, Vec2, Bnd2, Collision, Vertices }
+export { Mouse, Solver, Engine, Bodies, Vec2, Bnd2, Collision, Vertices }

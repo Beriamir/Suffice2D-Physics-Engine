@@ -68,7 +68,7 @@ export class Body {
         break;
     }
     this.friction = option.friction ?? defaultFriction;
-    this.restitution = option.restitution ?? 0.9;
+    this.restitution = option.restitution ?? 0.0;
     this.density = option.density ?? 2700;
     this.thickness = option.thickness ?? 0.01;
 
@@ -149,6 +149,48 @@ export class Body {
     this.bound = new Bnd2(this);
     this.contactPoints = [];
     this.edges = [];
+    this.anchorPoints = [];
+    this.anchorPointId = -1;
+  }
+
+  addAnchorPoint(point) {
+    const pointId = ++this.anchorPointId;
+
+    point.id = pointId;
+    this.anchorPoints.push(point);
+
+    return point;
+  }
+
+  removeAnchorPoint(point) {
+    for (let i = 0; i < this.anchorPoints.length; i++) {
+      const currPoint = this.anchorPoints[i];
+
+      if (currPoint.id === point.id) {
+        this.anchorPoints.splice(i, 1);
+        return null;
+      }
+    }
+  }
+
+  addGrabForce(anchorPoint, targetPoint, scalar = 1) {
+    const normal = Vec2.subtract(targetPoint, this.position).normalize();
+    const leverArm = Vec2.subtract(anchorPoint, this.position);
+    const torque = leverArm.cross(normal);
+
+    if (!this.isStatic)
+      this.linearVelocity.add(normal, scalar * this.inverseMass);
+    if (this.rotation)
+      this.angularVelocity += torque * scalar * this.inverseInertia;
+  }
+
+  renderAnchorPoints(ctx) {
+    ctx.fillStyle = 'white';
+    this.anchorPoints.forEach(point => {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 2, 0, Math.PI * 2);
+      ctx.fill();
+    });
   }
 
   setPosition(x, y) {
@@ -165,12 +207,18 @@ export class Body {
     this.prevPosition.copy(this.position);
     this.position.add(force, scalar);
     this.allVertices.forEach(point => point.add(force, scalar));
+    this.anchorPoints.forEach(point => {
+      point.add(force, scalar);
+    });
 
     this.bound.update();
   }
 
   rotate(angle) {
     this.allVertices.forEach(point =>
+      point.copy(point.subtract(this.position).rotate(angle).add(this.position))
+    );
+    this.anchorPoints.forEach(point =>
       point.copy(point.subtract(this.position).rotate(angle).add(this.position))
     );
 
@@ -279,10 +327,22 @@ export class Body {
     }
 
     if (!this.wireframe) {
+      // const gradient = ctx.createRadialGradient(
+      //   this.position.x,
+      //   this.position.y,
+      //   0,
+      //   this.position.x,
+      //   this.position.y,
+      //   this.radius ?? 0
+      // );
+
+      // gradient.addColorStop(0, '#e8e8e8');
+      // gradient.addColorStop(1, this.color);
+
       ctx.fillStyle = this.color;
       ctx.fill();
-      // ctx.strokeStyle = '#ffffffc0';
-      // ctx.stroke();
+      ctx.strokeStyle = '#ffffffc0';
+      ctx.stroke();
     } else {
       ctx.strokeStyle = this.isSleeping ? '#ffffff50' : '#ffffffc0';
       ctx.stroke();
@@ -292,8 +352,6 @@ export class Body {
   renderContacts(ctx) {
     ctx.fillStyle = 'orange';
     ctx.strokeStyle = 'orange';
-    // ctx.fillStyle = '#ee5858cf';
-    // ctx.strokeStyle = '#ee5858cf';
 
     this.contactPoints.forEach(point => {
       ctx.beginPath();
@@ -393,5 +451,6 @@ export class Body {
     this.bound.render(ctx);
     this.renderContacts(ctx);
     this.renderVelocity(ctx);
+    this.renderAnchorPoints(ctx);
   }
 }

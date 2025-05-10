@@ -1,23 +1,22 @@
-import * as Physics from './physics/index.js';
+import * as suffice2d from './suffice2d/index.js';
 
 const targetFPS = 60;
 let canvasWidth = innerWidth;
 let canvasHeight = innerHeight;
-const mouse = new Physics.Vec2(canvasWidth / 2, canvasHeight / 2);
+const mouse = new suffice2d.Vec2(canvasWidth / 2, canvasHeight / 2);
 
 let wireframe = false;
 let showGrid = false;
 let renderDebug = false;
-let restitution = 0.9;
+let restitution = 0;
 let subSteps = 4;
 let gravity = 9.81;
-const bodySize = 40;
+const bodySize = 50;
 
-const engine = new Physics.Engine({
+const engine = new suffice2d.Engine({
   targetFPS,
   subSteps,
   gravity,
-  velocityDamp: 0.999,
   removeOffBound: true,
   bound: {
     x: -bodySize,
@@ -78,7 +77,7 @@ document.addEventListener('DOMContentLoaded', function () {
     showGrid = false;
     renderDebug = false;
 
-    const ground = new Physics.Bodies.rectangle(
+    const ground = new suffice2d.Bodies.rectangle(
       canvasWidth * 0.45,
       canvasHeight * 0.9,
       50,
@@ -89,7 +88,7 @@ document.addEventListener('DOMContentLoaded', function () {
         rotation: false
       }
     );
-    const obstacle1 = new Physics.Bodies.capsule(
+    const obstacle1 = new suffice2d.Bodies.capsule(
       canvasWidth * 0.2,
       canvasHeight * 0.5,
       20,
@@ -100,7 +99,7 @@ document.addEventListener('DOMContentLoaded', function () {
         rotation: true
       }
     );
-    const obstacle2 = new Physics.Bodies.rectangle(
+    const obstacle2 = new suffice2d.Bodies.rectangle(
       canvasWidth * 0.9,
       canvasHeight * 0.5,
       canvasWidth * 0.5,
@@ -148,7 +147,7 @@ document.addEventListener('DOMContentLoaded', function () {
     );
     ctx.fillText(
       `
-        > Suffice2D Physics Engine 
+        > Suffice2D suffice2d Engine 
       `,
       canvasWidth * 0.5,
       fontSize * 3.5
@@ -238,7 +237,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function handleMouseMove(eventX, eventY) {
     mouse.set(eventX, eventY);
 
-    const position = new Physics.Vec2(
+    const position = new suffice2d.Vec2(
       clamp(mouse.x, bodySize, canvasWidth - bodySize),
       clamp(mouse.y, bodySize, canvasHeight - bodySize)
     );
@@ -249,7 +248,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     switch (shapeType) {
       case 'circle': {
-        const body = new Physics.Bodies.circle(
+        const body = new suffice2d.Bodies.circle(
           position.x,
           position.y,
           bodySize * 0.5,
@@ -260,7 +259,7 @@ document.addEventListener('DOMContentLoaded', function () {
         break;
       }
       case 'capsule': {
-        const body = new Physics.Bodies.capsule(
+        const body = new suffice2d.Bodies.capsule(
           position.x,
           position.y,
           bodySize * 0.5,
@@ -280,20 +279,20 @@ document.addEventListener('DOMContentLoaded', function () {
           const radius = bodySize * 0.7;
 
           vertices.push(
-            new Physics.Vec2(
+            new suffice2d.Vec2(
               position.x + radius * Math.cos(angle),
               position.y + radius * Math.sin(angle)
             )
           );
         }
 
-        const body = new Physics.Bodies.polygon(vertices, option);
+        const body = new suffice2d.Bodies.polygon(vertices, option);
 
         world.addBody(body);
         break;
       }
       case 'rectangle': {
-        const body = new Physics.Bodies.rectangle(
+        const body = new suffice2d.Bodies.rectangle(
           position.x,
           position.y,
           bodySize * 0.9,

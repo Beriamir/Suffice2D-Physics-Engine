@@ -6,7 +6,7 @@ export class Vertices {
 
     for (let i = 0; i < vertices.length; ++i) {
       const currPoint = vertices[i];
-      const nextPoint = vertices[(i + 1) % vertices.length];
+      const nextPoint = vertices[i + 1 > vertices.length - 1 ? 0 : i + 1];
 
       area += currPoint.cross(nextPoint);
     }
@@ -24,7 +24,7 @@ export class Vertices {
 
     for (let i = 0; i < newVertices.length; ++i) {
       const currPoint = newVertices[i];
-      const nextPoint = newVertices[(i + 1) % newVertices.length];
+      const nextPoint = newVertices[i + 1 > newVertices.length - 1 ? 0 : i + 1];
       const cross = currPoint.cross(nextPoint);
 
       numerator +=
@@ -45,9 +45,8 @@ export class Vertices {
 
     for (let i = 0; i < vertices.length; ++i) {
       const currPoint = vertices[i];
-      const nextPoint = vertices[(i + 1) % vertices.length];
-
-      const cross = currPoint.x * nextPoint.y - currPoint.y * nextPoint.x;
+      const nextPoint = vertices[i + 1 > vertices.length - 1 ? 0 : i + 1];
+      const cross = currPoint.cross(nextPoint);
 
       centroidX += (currPoint.x + nextPoint.x) * cross;
       centroidY += (currPoint.y + nextPoint.y) * cross;

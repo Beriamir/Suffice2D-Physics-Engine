@@ -274,7 +274,7 @@ export class Collision {
             point
           );
 
-          if (Math.abs(distanceSq - minDistanceSq) < 5e-3) {
+          if (Math.abs(distanceSq - minDistanceSq) < 1e-2) {
             if (!contactPoint.equal(contactPoint1)) {
               minDistanceSq = distanceSq;
               contactPoint2.copy(contactPoint);
@@ -336,9 +336,9 @@ export class Collision {
 
     const axes = [
       Vec2.subtract(contactPointInB, closestPointOfA),
+      Vec2.subtract(edgeB[1], edgeB[0]).perp(),
       Vec2.subtract(edgeA[1], edgeA[0]).perp(),
       Vec2.subtract(edgeA[2], edgeA[1]).perp(),
-      Vec2.subtract(edgeB[1], edgeB[0]).perp()
     ];
 
     for (const axis of axes) {
@@ -388,7 +388,7 @@ export class Collision {
             point
           );
 
-          if (Math.abs(distanceSq - minDistanceSq) < 5e-3) {
+          if (Math.abs(distanceSq - minDistanceSq) < 1e-2) {
             if (!contactPoint.equal(contactPoint1)) {
               contactPoint2.copy(contactPoint);
               contactCounts = 2;
@@ -499,7 +499,7 @@ export class Collision {
           point
         );
 
-        if (Math.abs(distanceSq - minDistanceSq) < 5e-4) {
+        if (Math.abs(distanceSq - minDistanceSq) < 1e-2) {
           if (!contactPoint.equal(contactPoint1)) {
             contactPoint2.copy(contactPoint.add(normal, radius));
             contactCounts = 2;

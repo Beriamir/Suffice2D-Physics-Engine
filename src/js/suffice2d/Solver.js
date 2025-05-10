@@ -16,9 +16,7 @@ export class Solver {
     } else if (!bodyA.isStatic && !bodyB.isStatic) {
       bodyA.addForce(normal, -overlap * 0.5);
       bodyB.addForce(normal, overlap * 0.5);
-    } else {
-      return;
-    }
+    } else return;
 
     const vA = bodyA.linearVelocity;
     const vB = bodyB.linearVelocity;
@@ -47,18 +45,15 @@ export class Solver {
     );
 
     const contactNum = contactPoints.length;
-    const torqueFactor = 0.5;
     const biasFactor = 0.02;
     const biasSlop = 0.8;
     const impulseBias = Solver._clamp(overlap - biasSlop, 0, 1) * biasFactor;
 
     // Compute Impulses
+
     for (let i = 0; i < contactNum; ++i) {
       rA[i] = Vec2.subtract(contactPoints[i], bodyA.position);
       rB[i] = Vec2.subtract(contactPoints[i], bodyB.position);
-
-      rA[i].scale(1 / contactNum);
-      rB[i].scale(1 / contactNum);
 
       tangent[i] = new Vec2();
       impulse[i] = 0;
@@ -75,11 +70,9 @@ export class Solver {
 
       tangent[i] = Vec2.subtract(relVel, Vec2.scale(normal, velNormal));
 
-      if (tangent[i].magnitudeSq() < 1e-6) {
-        tangent[i].zero();
-      } else {
+      if (tangent[i].magnitudeSq() > 1e-12) {
         tangent[i].normalize();
-      }
+      } else tangent[i].zero();
 
       const rnA = rAPerp.dot(normal);
       const rnB = rBPerp.dot(normal);
@@ -90,10 +83,10 @@ export class Solver {
       impulse[i] = (-(1 + restitution) * velNormal + impulseBias) / normalDenom;
 
       const tangentDenom = mA + mB + rtA ** 2 * iA + rtB ** 2 * iB;
-      friction[i] = -relVel.dot(tangent[i]) / tangentDenom;
+      friction[i] = -(relVel.dot(tangent[i]) + impulseBias) / tangentDenom;
 
       // Clamp impulse
-      if (impulse[i] < 1e-6) impulse[i] = 0;
+      if (impulse[i] < 0) impulse[i] = 0;
 
       const maxFriction = impulse[i] * kineticFriction;
       const minFriction = -maxFriction;
@@ -113,13 +106,11 @@ export class Solver {
     // Apply Impulses
     for (let i = 0; i < contactNum; ++i) {
       bodyA.angularVelocity +=
-        (rA[i].cross(Vec2.scale(normal, -impulse[i] * iA)) +
-          rA[i].cross(Vec2.scale(tangent[i], -friction[i] * iA))) *
-        torqueFactor;
+        rA[i].cross(Vec2.scale(normal, -impulse[i] * iA)) +
+        rA[i].cross(Vec2.scale(tangent[i], -friction[i] * iA));
       bodyB.angularVelocity +=
-        (rB[i].cross(Vec2.scale(normal, impulse[i] * iB)) +
-          rB[i].cross(Vec2.scale(tangent[i], friction[i] * iB))) *
-        torqueFactor;
+        rB[i].cross(Vec2.scale(normal, impulse[i] * iB)) +
+        rB[i].cross(Vec2.scale(tangent[i], friction[i] * iB));
 
       bodyA.linearVelocity
         .add(normal, -impulse[i] * mA)
