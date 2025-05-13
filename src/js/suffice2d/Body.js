@@ -60,11 +60,11 @@ export class Body {
 
       case 'rectangle':
       case 'polygon':
-        defaultFriction = { static: 0.8, kinetic: 0.7 };
+        defaultFriction = { static: 9, kinetic: 7 };
         break;
 
       case 'capsule':
-        defaultFriction = { static: 0.7, kinetic: 0.6 };
+        defaultFriction = { static: 0.6, kinetic: 0.4 };
         break;
     }
     this.friction = option.friction ?? defaultFriction;
@@ -234,6 +234,8 @@ export class Body {
       this.axisPoint.copy(this.position.clone().add(direction));
       this.allVertices = [];
       this.allVertices.push(...this.vertices, this.axisPoint);
+
+      this.bound.update();
     }
   }
 
@@ -429,7 +431,9 @@ export class Body {
       ctx.beginPath();
       ctx.moveTo(edge[0].x, edge[0].y);
       ctx.lineTo(edge[1].x, edge[1].y);
-      ctx.lineTo(edge[2].x, edge[2].y);
+      if (edge.length === 3) {
+        ctx.lineTo(edge[2].x, edge[2].y);
+      }
       ctx.stroke();
     });
   }

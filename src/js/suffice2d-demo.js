@@ -8,10 +8,10 @@ const mouse = new suffice2d.Vec2(canvasWidth / 2, canvasHeight / 2);
 let wireframe = false;
 let showGrid = false;
 let renderDebug = false;
-let restitution = 0;
+let restitution = 0.5;
 let subSteps = 4;
 let gravity = 9.81;
-const bodySize = 50;
+const bodySize = 40;
 
 const engine = new suffice2d.Engine({
   targetFPS,
@@ -58,6 +58,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   canvas.width = canvasWidth;
   canvas.height = canvasHeight;
+  // canvas.style.width = `${canvasWidth}px`;
+  // canvas.style.height = `${canvasHeight}px`;
+  // ctx.scale(2, 2);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
@@ -68,6 +71,8 @@ document.addEventListener('DOMContentLoaded', function () {
   /**
    * Initialize
    */
+
+  let obstacle2 = null;
   function init() {
     world.empty();
     shapeTypeIndex = 0;
@@ -99,7 +104,7 @@ document.addEventListener('DOMContentLoaded', function () {
         rotation: true
       }
     );
-    const obstacle2 = new suffice2d.Bodies.rectangle(
+    obstacle2 = new suffice2d.Bodies.rectangle(
       canvasWidth * 0.9,
       canvasHeight * 0.5,
       canvasWidth * 0.5,
@@ -114,6 +119,7 @@ document.addEventListener('DOMContentLoaded', function () {
     ground.rotate(Math.PI * 0.5);
     obstacle1.rotate(Math.PI * 0.5);
     obstacle2.rotate(Math.PI / 1.2);
+    // obstacle2.roundCorner(25);
 
     world.addBodies([ground, obstacle1, obstacle2]);
   }
@@ -133,6 +139,15 @@ document.addEventListener('DOMContentLoaded', function () {
       body.render(ctx);
       if (renderDebug) body.renderDebug(ctx);
     });
+
+    // obstacle2.vertices.forEach((point, i) => {
+    //   ctx.fillStyle = 'red';
+    //   ctx.beginPath();
+    //   // ctx.arc(point.x, point.y, 1, 0, Math.PI * 2);
+    //   // ctx.fill();
+    //   ctx.font = `normal ${8}px Arial`;
+    //   ctx.fillText(`${i}`, point.x, point.y);
+    // });
 
     ctx.fillStyle = 'white';
     ctx.font = `normal ${fontSize}px Arial`;
@@ -262,8 +277,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const body = new suffice2d.Bodies.capsule(
           position.x,
           position.y,
-          bodySize * 0.5,
-          bodySize * 0.5,
+          bodySize * 0.35,
+          bodySize * 0.75,
           option
         );
 
@@ -276,7 +291,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         for (let i = 0; i < edgeCount; ++i) {
           const angle = (i * Math.PI * 2) / edgeCount;
-          const radius = bodySize * 0.7;
+          const radius = bodySize * 0.65;
 
           vertices.push(
             new suffice2d.Vec2(

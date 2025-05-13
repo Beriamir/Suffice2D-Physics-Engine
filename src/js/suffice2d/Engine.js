@@ -26,26 +26,15 @@ export class Engine {
 
   renderGrid(ctx) {
     this.grid.render(ctx);
+
+    // Draw Origin
     ctx.beginPath();
     ctx.arc(0, 0, 2, 0, Math.PI * 2);
     ctx.fillStyle = 'white';
     ctx.fill();
   }
 
-  removeOffBound(body, boundX, boundY, boundW, boundH) {
-    const { min, max, width, height } = body.bound;
-
-    if (
-      min.x < boundX - width ||
-      min.y < boundY - height ||
-      max.x > boundW + width ||
-      max.y > boundH + height
-    ) {
-      this.world.removeBody(body);
-    }
-  }
-
-  run(deltaTime = 1000 / 60) {
+  run(deltaTime = 1000 / 60, ctx = {}) {
     deltaTime /= this.subSteps;
 
     for (let subStep = 1; subStep <= this.subSteps; ++subStep) {
@@ -55,18 +44,26 @@ export class Engine {
         const acceleration = Vec2.scale(force, bodyA.inverseMass);
 
         bodyA.linearVelocity.add(acceleration, deltaTime);
+        bodyA.contactPoints.length = 0;
+        bodyA.edges.length = 0;
+
         if (!bodyA.isStatic) bodyA.addForce(bodyA.linearVelocity, deltaTime);
         if (bodyA.rotation) bodyA.rotate(bodyA.angularVelocity * deltaTime);
+
+        const nearby = this.grid.queryNearby(bodyA);
+
+        for (const bodyB of nearby) {
+          const manifold = this._detectCollision(bodyA, bodyB);
+
+          if (manifold) {
+            Solver.solveCollision(bodyA, bodyB, manifold);
+          }
+        }
 
         if (subStep == 1) {
           this.grid.updateData(bodyA);
 
-          if (
-            bodyA.bound.min.x < this.grid.bound[0] - bodyA.bound.width ||
-            bodyA.bound.min.y < this.grid.bound[1] - bodyA.bound.height ||
-            bodyA.bound.max.x > this.grid.bound[2] + bodyA.bound.width ||
-            bodyA.bound.max.y > this.grid.bound[3] + bodyA.bound.height
-          ) {
+          if (!bodyA.bound.overlaps(this.grid)) {
             this.grid.removeData(bodyA);
 
             if (this.removeOffBound) {
@@ -78,19 +75,6 @@ export class Engine {
 
               continue;
             }
-          }
-        }
-
-        bodyA.contactPoints.length = 0;
-        bodyA.edges.length = 0;
-
-        const nearby = this.grid.queryNearby(bodyA);
-
-        for (const bodyB of nearby) {
-          const manifold = this._detectCollision(bodyA, bodyB);
-
-          if (manifold) {
-            Solver.solveCollision(bodyA, bodyB, manifold);
           }
         }
       }

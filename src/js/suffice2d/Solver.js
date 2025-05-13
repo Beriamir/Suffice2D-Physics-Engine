@@ -44,12 +44,11 @@ export class Solver {
       bodyB.friction.kinetic
     );
 
-    const contactNum = contactPoints.length;
-    const biasFactor = 0.02;
-    const biasSlop = 0.8;
-    const impulseBias = Solver._clamp(overlap - biasSlop, 0, 1) * biasFactor;
-
     // Compute Impulses
+    const contactNum = contactPoints.length;
+    const biasFactor = 0.03;
+    const biasSlop = 0.9;
+    const impulseBias = Solver._clamp(overlap - biasSlop, 0, 1) * biasFactor;
 
     for (let i = 0; i < contactNum; ++i) {
       rA[i] = Vec2.subtract(contactPoints[i], bodyA.position);
@@ -78,26 +77,21 @@ export class Solver {
       const rnB = rBPerp.dot(normal);
       const rtA = rAPerp.dot(tangent[i]);
       const rtB = rBPerp.dot(tangent[i]);
+      const normalDenom = mA + mB + rnA * rnA * iA + rnB * rnB * iB;
+      const tangentDenom = mA + mB + rtA * rtA * iA + rtB * rtB * iB;
 
-      const normalDenom = mA + mB + rnA ** 2 * iA + rnB ** 2 * iB;
       impulse[i] = (-(1 + restitution) * velNormal + impulseBias) / normalDenom;
-
-      const tangentDenom = mA + mB + rtA ** 2 * iA + rtB ** 2 * iB;
       friction[i] = -(relVel.dot(tangent[i]) + impulseBias) / tangentDenom;
 
-      // Clamp impulse
-      if (impulse[i] < 0) impulse[i] = 0;
-
-      const maxFriction = impulse[i] * kineticFriction;
-      const minFriction = -maxFriction;
+      const maxStatic = impulse[i] * staticFriction;
+      const maxKinetic = impulse[i] * kineticFriction;
 
       // Coulomb's law
-      if (Math.abs(friction[i]) > impulse[i] * staticFriction) {
-        friction[i] = minFriction;
+      if (Math.abs(friction[i]) > maxStatic) {
+        friction[i] = Solver._clamp(friction[i], -maxKinetic, maxKinetic);
+      } else {
+        friction[i] = Solver._clamp(friction[i], -maxStatic, maxStatic);
       }
-
-      // Clamp friction
-      friction[i] = Solver._clamp(friction[i], minFriction, maxFriction);
 
       impulse[i] /= contactNum;
       friction[i] /= contactNum;

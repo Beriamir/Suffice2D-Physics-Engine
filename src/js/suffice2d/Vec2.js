@@ -50,8 +50,8 @@ export class Vec2 {
   }
 
   equal(v) {
-    const epsilon = 5e-4;
-    return Vec2.distanceSq(this, v) <= epsilon ** 2;
+    const epsilon = 1e-12;
+    return Vec2.distanceSq(this, v) <= epsilon;
   }
 
   string() {
@@ -115,8 +115,8 @@ export class Vec2 {
     else return this.scale(1 / length);
   }
 
-  static add(v1, v2) {
-    return new Vec2(v1.x + v2.x, v1.y + v2.y);
+  static add(v1, v2, scalar = 1) {
+    return new Vec2(v1.x + v2.x * scalar, v1.y + v2.y * scalar);
   }
 
   static subtract(v1, v2) {
@@ -140,7 +140,6 @@ export class Vec2 {
 
   static distance(v1, v2) {
     const dir = Vec2.subtract(v1, v2);
-
     return Math.sqrt(dir.x ** 2 + dir.y ** 2);
   }
 

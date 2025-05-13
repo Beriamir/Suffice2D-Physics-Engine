@@ -1,6 +1,10 @@
+import { Vec2 } from './Vec2.js';
+
 export class SpatialGrid {
   constructor(x, y, width, height, scale) {
     this.bound = [x, y, width, height];
+    this.min = new Vec2(x, y);
+    this.max = new Vec2(x + width, y + height);
     this.columns = Math.floor(width / scale);
     this.rows = Math.floor(height / scale);
     this.grid = Array.from({ length: this.columns * this.rows }, () => []);

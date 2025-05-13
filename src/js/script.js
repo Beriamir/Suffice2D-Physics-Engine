@@ -11,15 +11,15 @@ onload = function main() {
   ctx.textBaseline = 'middle';
 
   const engine = new suffice2d.Engine({
-    gravity: 9.81,
-    subSteps: 8
+    gravity: 0.0,
+    subSteps: 4
   });
-  const wireframe = true;
+  const wireframe = false;
   const restitution = 0.4;
   const circleRadius = 30;
   const grabForce = 2;
-  const density = 1000;
-  const initialCount = 15;
+  const density = null;
+  const initialCount = 20;
 
   const mouse = new suffice2d.Mouse(canvasWidth / 2, canvasHeight / 2);
 
@@ -108,7 +108,7 @@ onload = function main() {
       density
     };
 
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 10; i++) {
       const radius = circleRadius;
       const x = Math.max(
         radius,
@@ -164,7 +164,7 @@ onload = function main() {
 
   function update(dt) {
     render(ctx, dt);
-    engine.run(dt);
+    engine.run(dt, ctx);
   }
 
   engine.animator.start(update);

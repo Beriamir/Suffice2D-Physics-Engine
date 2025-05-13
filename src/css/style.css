@@ -16,6 +16,7 @@ body {
 .canvas {
   background: #2f1e35;
   position: absolute;
+  touch-action: none;
 }
 
 .btn:hover,

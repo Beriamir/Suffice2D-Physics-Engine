@@ -1,14 +1,30 @@
 import { Vec2 } from './Vec2.js';
 
 export class Collision {
-  static _getClosestContactPointInEdges(edges, targetPoint) {
+  static _getClosestPoint(targetPoint, vertices) {
+    let minDistanceSq = Infinity;
+    let minIndex = -1;
+
+    for (let i = 0; i < vertices.length; ++i) {
+      const distanceSq = Vec2.distanceSq(vertices[i], targetPoint);
+
+      if (distanceSq < minDistanceSq) {
+        minDistanceSq = distanceSq;
+        minIndex = i;
+      }
+    }
+
+    return vertices[minIndex];
+  }
+
+  static _getContactPoint(targetPoint, vertices) {
     let minDistanceSq = Infinity;
     const closestPoint = new Vec2();
-    const n = edges.length;
+    const n = vertices.length;
 
     for (let i = 0; i < n - 1; ++i) {
-      const currPoint = edges[i];
-      const nextPoint = edges[i + 1];
+      const currPoint = vertices[i];
+      const nextPoint = vertices[i + 1];
       const { contactPoint, distanceSq } = this._getPointInLineSegment(
         currPoint,
         nextPoint,
@@ -24,25 +40,22 @@ export class Collision {
     return closestPoint;
   }
 
-  static _getVerticesEdgesInDirection(vertices, direction) {
-    const n = vertices.length;
-    let maxDistance = -Infinity;
-    let maxIndex = -1;
+  static _getPointInLineSegment(startPoint, endPoint, targetPoint) {
+    const ab = Vec2.subtract(endPoint, startPoint);
+    const ap = Vec2.subtract(targetPoint, startPoint);
+    const abLengthSq = ab.magnitudeSq();
+    const projection = ap.dot(ab) / abLengthSq;
+    const contactPoint = ab.scale(projection).add(startPoint);
 
-    for (let i = 0; i < n; ++i) {
-      const distance = vertices[i].dot(direction);
-
-      if (distance > maxDistance) {
-        maxDistance = distance;
-        maxIndex = i;
-      }
+    if (projection < 0) {
+      contactPoint.copy(startPoint);
+    } else if (projection > 1) {
+      contactPoint.copy(endPoint);
     }
 
-    return [
-      vertices[(maxIndex - 1 + n) % n],
-      vertices[maxIndex],
-      vertices[(maxIndex + 1) % n]
-    ];
+    const distanceSq = Vec2.distanceSq(targetPoint, contactPoint);
+
+    return { contactPoint, distanceSq };
   }
 
   static _projectPointsWithRadius(points, radius, axis) {
@@ -73,38 +86,40 @@ export class Collision {
     return { min, max };
   }
 
-  static _getVerticesClosestPoint(vertices, targetPoint) {
-    let minDistanceSq = Infinity;
-    let minIndex = -1;
+  static _getEdge(direction, vertices, center) {
+    let bestDot = -Infinity;
+    const edge = [];
+    const n = vertices.length;
 
-    for (let i = 0; i < vertices.length; ++i) {
-      const distanceSq = Vec2.distanceSq(vertices[i], targetPoint);
+    for (let i = 0; i < n; ++i) {
+      const vertexA = vertices[i];
+      const c = Vec2.subtract(vertexA, center);
+      const dot = direction.dot(vertexA);
+      const cross = direction.cross(c);
 
-      if (distanceSq < minDistanceSq) {
-        minDistanceSq = distanceSq;
-        minIndex = i;
+      if (dot > bestDot) {
+        bestDot = dot;
+        edge[0] = vertexA;
+        edge[1] = cross > 0 ? vertices[(i - 1 + n) % n] : vertices[(i + 1) % n];
       }
     }
 
-    return vertices[minIndex];
+    return edge;
   }
 
-  static _getPointInLineSegment(startPoint, endPoint, targetPoint) {
-    const ab = Vec2.subtract(endPoint, startPoint);
-    const ap = Vec2.subtract(targetPoint, startPoint);
-    const abLengthSq = ab.magnitudeSq();
-    const projection = ap.dot(ab) / abLengthSq;
-    const contactPoint = ab.scale(projection).add(startPoint);
+  static _getAxes(vertices) {
+    const axes = [];
+    const n = vertices.length;
 
-    if (projection < 0) {
-      contactPoint.copy(startPoint);
-    } else if (projection > 1) {
-      contactPoint.copy(endPoint);
+    for (let i = 0; i < n; ++i) {
+      const vertexA = vertices[i];
+      const vertexB = vertices[i + 1 > n - 1 ? 0 : i + 1];
+      const edgeNormal = Vec2.subtract(vertexB, vertexA).perp();
+
+      axes.push(edgeNormal);
     }
 
-    const distanceSq = Vec2.distanceSq(targetPoint, contactPoint);
-
-    return { contactPoint, distanceSq };
+    return axes;
   }
 
   static detectCircleToCircle(bodyA, bodyB) {
@@ -132,19 +147,18 @@ export class Collision {
   static detectCircleToRectangle(bodyA, bodyB) {
     const normal = new Vec2();
     let overlapDepth = Infinity;
-    const direction = Vec2.subtract(bodyB.position, bodyA.position);
-    const edges = this._getVerticesEdgesInDirection(
-      bodyB.vertices,
-      Vec2.negate(direction)
-    );
-    const closestPoint = this._getVerticesClosestPoint(edges, bodyA.position);
-    const axes = [
-      Vec2.subtract(closestPoint, bodyA.position),
-      Vec2.subtract(edges[1], edges[0]).perp(),
-      Vec2.subtract(edges[2], edges[1]).perp()
-    ];
 
-    for (const axis of axes) {
+    const directionA = Vec2.subtract(bodyB.position, bodyA.position);
+    const directionB = Vec2.subtract(bodyA.position, bodyB.position);
+    const edgeB = this._getEdge(directionB, bodyB.vertices, bodyB.position);
+    const closestPoint = this._getClosestPoint(bodyA.position, edgeB);
+
+    const axisA = Vec2.subtract(closestPoint, bodyA.position);
+    const axesB = this._getAxes(bodyB.vertices);
+
+    axesB.splice(0, 0, axisA);
+
+    for (const axis of axesB) {
       axis.normalize();
 
       const projA = this._projectPointsWithRadius(
@@ -168,144 +182,115 @@ export class Collision {
       }
     }
 
-    if (direction.dot(normal) < 0) normal.negate();
+    if (directionA.dot(normal) < 0) normal.negate();
 
-    // Contact Points
-    let minDistanceSq = Infinity;
-    const minContactPoint = new Vec2();
-    const n = edges.length;
+    const { contactPoint } = this._getPointInLineSegment(
+      edgeB[0],
+      edgeB[1],
+      bodyA.position
+    );
 
-    for (let i = 0; i < n - 1; ++i) {
-      const currPoint = edges[i];
-      const nextPoint = edges[i + 1];
-
-      const { contactPoint, distanceSq } = this._getPointInLineSegment(
-        currPoint,
-        nextPoint,
-        bodyA.position
-      );
-
-      if (distanceSq < minDistanceSq) {
-        minDistanceSq = distanceSq;
-        minContactPoint.copy(contactPoint);
-      }
-    }
-
-    bodyA.contactPoints.push(minContactPoint);
-    bodyA.edges.push(edges);
+    bodyA.contactPoints.push(contactPoint);
+    bodyA.edges.push(edgeB);
 
     return {
       collision: true,
       normal,
       overlapDepth,
-      contactPoints: [minContactPoint]
+      contactPoints: [contactPoint]
     };
   }
 
   static detectPolygonToPolygon(bodyA, bodyB) {
     const normal = new Vec2();
-    let overlapDepth = Infinity;
-    const direction = Vec2.subtract(bodyB.position, bodyA.position);
-    let edgeA = this._getVerticesEdgesInDirection(bodyA.vertices, direction);
-    let edgeB = this._getVerticesEdgesInDirection(
-      bodyB.vertices,
-      Vec2.negate(direction)
-    );
-    const closestContactToA = this._getClosestContactPointInEdges(
-      edgeB,
-      bodyA.position
-    );
-    const closestContactToB = this._getClosestContactPointInEdges(
-      edgeA,
-      bodyB.position
-    );
-    const directionA = Vec2.subtract(closestContactToA, bodyA.position);
-    const directionB = Vec2.subtract(closestContactToB, bodyB.position);
+    let overlap = Infinity;
 
-    edgeA = this._getVerticesEdgesInDirection(bodyA.vertices, directionA);
-    edgeB = this._getVerticesEdgesInDirection(bodyB.vertices, directionB);
+    const directionA = Vec2.subtract(bodyB.position, bodyA.position);
+    const directionB = Vec2.subtract(bodyA.position, bodyB.position);
+    let edgeA = this._getEdge(directionA, bodyA.vertices, bodyA.position);
+    let edgeB = this._getEdge(directionB, bodyB.vertices, bodyB.position);
 
-    const axes = [
-      Vec2.subtract(edgeA[1], edgeA[0]).perp(),
-      Vec2.subtract(edgeA[2], edgeA[1]).perp(),
-      Vec2.subtract(edgeB[1], edgeB[0]).perp(),
-      Vec2.subtract(edgeB[2], edgeB[1]).perp()
-    ];
+    const contactPointInA = this._getContactPoint(bodyB.position, edgeA);
+    const contactPointInB = this._getContactPoint(bodyA.position, edgeB);
 
-    for (const axis of axes) {
-      axis.normalize();
+    directionA.copy(Vec2.subtract(contactPointInB, bodyA.position));
+    directionB.copy(Vec2.subtract(contactPointInA, bodyB.position));
+    edgeA = this._getEdge(directionA, bodyA.vertices, bodyA.position);
+    edgeB = this._getEdge(directionB, bodyB.vertices, bodyB.position);
 
-      const projA = this._projectVertices(bodyA.vertices, axis);
-      const projB = this._projectVertices(bodyB.vertices, axis);
+    const axesA = this._getAxes(bodyA.vertices);
+    const axesB = this._getAxes(bodyB.vertices);
 
-      if (projA.min > projB.max || projB.min > projA.max)
-        return { collision: null };
+    const _getMTV = axes => {
+      for (const axis of axes) {
+        axis.normalize();
 
-      const axisOverlapDepth = Math.min(
-        projA.max - projB.min,
-        projB.max - projA.min
-      );
+        const projA = this._projectVertices(bodyA.vertices, axis);
+        const projB = this._projectVertices(bodyB.vertices, axis);
 
-      if (axisOverlapDepth < overlapDepth) {
-        overlapDepth = axisOverlapDepth;
-        normal.copy(axis);
-      }
-    }
+        if (projA.min > projB.max || projB.min > projA.max) {
+          return null;
+        }
 
-    if (direction.dot(normal) < 0) normal.negate();
+        const axisOverlap = Math.min(
+          projA.max - projB.min,
+          projB.max - projA.min
+        );
 
-    // Contact Points
-    const contactPoints = [];
-    const contactPoint1 = new Vec2();
-    const contactPoint2 = new Vec2();
-    let contactCounts = 0;
-    let minDistanceSq = Infinity;
-
-    function _checkForContactPoints(points, vertices) {
-      for (let i = 0; i < points.length; ++i) {
-        const point = points[i];
-
-        for (let j = 0; j < vertices.length - 1; ++j) {
-          const currPoint = vertices[j];
-          const nextPoint = vertices[j + 1];
-          const { contactPoint, distanceSq } = Collision._getPointInLineSegment(
-            currPoint,
-            nextPoint,
-            point
-          );
-
-          if (Math.abs(distanceSq - minDistanceSq) < 1e-2) {
-            if (!contactPoint.equal(contactPoint1)) {
-              minDistanceSq = distanceSq;
-              contactPoint2.copy(contactPoint);
-              contactCounts = 2;
-            }
-          } else if (distanceSq < minDistanceSq) {
-            minDistanceSq = distanceSq;
-            contactPoint1.copy(contactPoint);
-            contactCounts = 1;
-          }
+        if (axisOverlap < overlap) {
+          overlap = axisOverlap;
+          normal.copy(axis);
         }
       }
+
+      return true;
+    };
+
+    if (!_getMTV(axesA) || !_getMTV(axesB)) {
+      return { collision: null };
     }
 
-    _checkForContactPoints(edgeA, edgeB);
-    _checkForContactPoints(edgeB, edgeA);
+    if (directionA.dot(normal) < 0) normal.negate();
 
-    if (contactCounts == 1) {
-      contactPoints.push(contactPoint1);
-      bodyA.contactPoints.push(contactPoint1);
-    } else if (contactCounts == 2) {
-      contactPoints.push(contactPoint1, contactPoint2);
-      bodyA.contactPoints.push(contactPoint1, contactPoint2);
-    }
+    const contactPoints = [];
+    let minDistanceSq = Infinity;
 
-    bodyA.edges.push(edgeA, edgeB);
+    const _findContactPoints = (edgeA, edgeB) => {
+      for (let i = 0; i < edgeA.length; ++i) {
+        const vertexA = edgeA[i];
+        const vertexB0 = edgeB[0];
+        const vertexB1 = edgeB[1];
+        const { contactPoint, distanceSq } = this._getPointInLineSegment(
+          vertexB0,
+          vertexB1,
+          vertexA
+        );
+
+        if (Math.abs(distanceSq - minDistanceSq) < 1e-2) {
+          if (!contactPoint.equal(contactPoints[0])) {
+            minDistanceSq = distanceSq;
+            contactPoints[1] = contactPoint;
+          }
+        } else if (distanceSq < minDistanceSq) {
+          minDistanceSq = distanceSq;
+          contactPoints[0] = contactPoint;
+        }
+      }
+    };
+
+    _findContactPoints(edgeA, edgeB);
+    _findContactPoints(edgeB, edgeA);
+
+    contactPoints.forEach(point => {
+      bodyA.contactPoints.push(point);
+    });
+
+    bodyA.edges.push(edgeA);
 
     return {
       collision: true,
       normal,
-      overlapDepth,
+      overlapDepth: overlap,
       contactPoints
     };
   }
@@ -313,35 +298,26 @@ export class Collision {
   static detectPolygonToCapsule(bodyA, bodyB) {
     const normal = new Vec2();
     let overlapDepth = Infinity;
-    const direction = Vec2.subtract(bodyB.position, bodyA.position);
-    let edgeA = this._getVerticesEdgesInDirection(bodyA.vertices, direction);
+
+    const directionA = Vec2.subtract(bodyB.position, bodyA.position);
+    let edgeA = this._getEdge(directionA, bodyA.vertices, bodyA.position);
     let edgeB = [bodyB.startPoint, bodyB.endPoint];
-    const closestContactToA = this._getClosestContactPointInEdges(
-      edgeB,
-      bodyA.position
-    );
-    const newDirectionA = Vec2.subtract(closestContactToA, bodyA.position);
+    const contactPointInB = this._getContactPoint(bodyA.position, edgeB);
 
-    edgeA = this._getVerticesEdgesInDirection(bodyA.vertices, newDirectionA);
+    directionA.copy(Vec2.subtract(contactPointInB, bodyA.position));
+    edgeA = this._getEdge(directionA, bodyA.vertices, bodyA.position);
 
-    const closestPointOfA = this._getVerticesClosestPoint(
-      bodyA.vertices,
-      bodyB.position
-    );
-    const { contactPoint: contactPointInB } = this._getPointInLineSegment(
-      edgeB[0],
-      edgeB[1],
-      closestPointOfA
-    );
+    const closestPointOfA = this._getClosestPoint(bodyB.position, edgeA);
 
-    const axes = [
+    const axesA = this._getAxes(bodyA.vertices);
+    axesA.splice(
+      0,
+      0,
       Vec2.subtract(contactPointInB, closestPointOfA),
-      Vec2.subtract(edgeB[1], edgeB[0]).perp(),
-      Vec2.subtract(edgeA[1], edgeA[0]).perp(),
-      Vec2.subtract(edgeA[2], edgeA[1]).perp(),
-    ];
+      Vec2.subtract(edgeB[1], edgeB[0]).perp()
+    );
 
-    for (const axis of axes) {
+    for (const axis of axesA) {
       axis.normalize();
 
       const projA = this._projectVertices(bodyA.vertices, axis);
@@ -365,63 +341,48 @@ export class Collision {
       }
     }
 
-    if (direction.dot(normal) < 0) normal.negate();
+    if (directionA.dot(normal) < 0) normal.negate();
 
-    // Contact Points
     const contactPoints = [];
-    const contactPoint1 = new Vec2();
-    const contactPoint2 = new Vec2();
-    let contactCounts = 0;
     let minDistanceSq = Infinity;
 
-    function _checkForContactPoints(points, vertices) {
-      for (let i = 0; i < points.length; ++i) {
-        const point = points[i];
+    const _findContactPoints = (edgeA, edgeB) => {
+      for (let i = 0; i < edgeA.length; ++i) {
+        const vertexA = edgeA[i];
+        const vertexB0 = edgeB[0];
+        const vertexB1 = edgeB[1];
 
-        for (let j = 0; j < vertices.length - 1; ++j) {
-          const currPoint = vertices[j];
-          const nextPoint = vertices[j + 1];
+        const { contactPoint, distanceSq } = this._getPointInLineSegment(
+          vertexB0,
+          vertexB1,
+          vertexA
+        );
 
-          const { contactPoint, distanceSq } = Collision._getPointInLineSegment(
-            currPoint,
-            nextPoint,
-            point
-          );
-
-          if (Math.abs(distanceSq - minDistanceSq) < 1e-2) {
-            if (!contactPoint.equal(contactPoint1)) {
-              contactPoint2.copy(contactPoint);
-              contactCounts = 2;
-            }
-          } else if (distanceSq < minDistanceSq) {
-            minDistanceSq = distanceSq;
-            contactPoint1.copy(contactPoint);
-            contactCounts = 1;
+        if (Math.abs(distanceSq - minDistanceSq) < 1e-2) {
+          if (!contactPoint.equal(contactPoints[0])) {
+            contactPoints[1] = contactPoint;
           }
+        } else if (distanceSq < minDistanceSq) {
+          minDistanceSq = distanceSq;
+          contactPoints[0] = contactPoint;
         }
       }
+    };
+
+    _findContactPoints(edgeA, edgeB);
+
+    if (contactPoints.length > 0) {
+      contactPoints[0].add(Vec2.scale(normal, -bodyB.radius));
+    } else if (contactPoints.length > 1) {
+      contactPoints[0].add(Vec2.scale(normal, -bodyB.radius));
+      contactPoints[1].add(Vec2.scale(normal, -bodyB.radius));
     }
 
-    _checkForContactPoints(edgeA, edgeB);
+    _findContactPoints(edgeB, edgeA);
 
-    if (contactCounts == 1) {
-      contactPoint1.add(Vec2.scale(normal, -bodyB.radius));
-    } else if (contactCounts == 2) {
-      contactPoint1.add(Vec2.scale(normal, -bodyB.radius));
-      contactPoint2.add(Vec2.scale(normal, -bodyB.radius));
-    }
-
-    _checkForContactPoints(edgeB, edgeA);
-
-    if (contactCounts == 1) {
-      contactPoints.push(contactPoint1);
-      bodyA.contactPoints.push(contactPoint1);
-      bodyB.contactPoints.push(contactPoint1);
-    } else if (contactCounts == 2) {
-      contactPoints.push(contactPoint1, contactPoint2);
-      bodyA.contactPoints.push(contactPoint1, contactPoint2);
-      bodyB.contactPoints.push(contactPoint1, contactPoint2);
-    }
+    contactPoints.forEach(point => {
+      bodyA.contactPoints.push(point);
+    });
 
     bodyA.edges.push(edgeA);
 
@@ -448,9 +409,6 @@ export class Collision {
       edgeB[1],
       bodyA.position
     );
-    // const closestToA = this._closestVertexfrom(edgeA, edgeB);
-    // const closestToB = this._closestVertexfrom(edgeB, edgeA);
-
     const direction = Vec2.subtract(contactPointInB, contactPointInA);
     const axes = [
       direction,
@@ -481,47 +439,38 @@ export class Collision {
 
     if (direction.dot(normal) < 0) normal.negate();
 
-    // Contact Points
     const contactPoints = [];
-    const contactPoint1 = new Vec2();
-    const contactPoint2 = new Vec2();
-    let contactCounts = 0;
     let minDistanceSq = Infinity;
 
-    function _checkForContactPoints(points, edge, radius) {
-      points.forEach(point => {
-        const currPoint = edge[0];
-        const nextPoint = edge[1];
+    const _findContactPoints = (edgeA, edgeB, radius) => {
+      for (let i = 0; i < edgeA.length; ++i) {
+        const vertexA = edgeA[i];
+        const vertexB0 = edgeB[0];
+        const vertexB1 = edgeB[1];
 
-        const { contactPoint, distanceSq } = Collision._getPointInLineSegment(
-          currPoint,
-          nextPoint,
-          point
+        const { contactPoint, distanceSq } = this._getPointInLineSegment(
+          vertexB0,
+          vertexB1,
+          vertexA
         );
 
         if (Math.abs(distanceSq - minDistanceSq) < 1e-2) {
-          if (!contactPoint.equal(contactPoint1)) {
-            contactPoint2.copy(contactPoint.add(normal, radius));
-            contactCounts = 2;
+          if (!contactPoint.equal(contactPoints[0])) {
+            contactPoints[1] = contactPoint.add(normal, radius);
           }
         } else if (distanceSq < minDistanceSq) {
           minDistanceSq = distanceSq;
-          contactPoint1.copy(contactPoint.add(normal, radius));
-          contactCounts = 1;
+          contactPoints[0] = contactPoint.add(normal, radius);
         }
-      });
-    }
+      }
+    };
 
-    _checkForContactPoints(edgeA, edgeB, -bodyB.radius);
-    _checkForContactPoints(edgeB, edgeA, bodyA.radius);
+    _findContactPoints(edgeA, edgeB, -bodyB.radius);
+    _findContactPoints(edgeB, edgeA, bodyA.radius);
 
-    if (contactCounts == 1) {
-      contactPoints.push(contactPoint1);
-      bodyA.contactPoints.push(contactPoint1);
-    } else if (contactCounts == 2) {
-      contactPoints.push(contactPoint1, contactPoint2);
-      bodyA.contactPoints.push(contactPoint1, contactPoint2);
-    }
+    contactPoints.forEach(point => {
+      bodyA.contactPoints.push(point);
+    });
 
     return {
       collision: true,
@@ -533,13 +482,13 @@ export class Collision {
 
   static detectCircleToCapsule(bodyA, bodyB) {
     const edgeB = [bodyB.startPoint, bodyB.endPoint];
-    const { contactPoint: pointB } = this._getPointInLineSegment(
+    const { contactPoint: contactPointInB } = this._getPointInLineSegment(
       edgeB[0],
       edgeB[1],
       bodyA.position
     );
 
-    const direction = Vec2.subtract(pointB, bodyA.position);
+    const direction = Vec2.subtract(contactPointInB, bodyA.position);
     const distanceSq = direction.magnitudeSq();
     const radii = bodyA.radius + bodyB.radius;
 
@@ -553,7 +502,6 @@ export class Collision {
     const contactPoint = Vec2.scale(normal, bodyA.radius).add(bodyA.position);
 
     bodyA.contactPoints.push(contactPoint);
-    bodyB.contactPoints.push(contactPoint);
 
     return {
       collision: true,
