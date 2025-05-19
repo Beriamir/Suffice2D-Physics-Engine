@@ -67,8 +67,30 @@ export class Bnd2 {
     );
   }
 
+  static expand(bound, scalar = 1) {
+    return {
+      min: {
+        x: bound.min.x - scalar,
+        y: bound.min.y - scalar
+      },
+      max: {
+        x: bound.max.x + scalar,
+        y: bound.max.y + scalar
+      }
+    };
+  }
+
+  static overlaps(boundA, boundB) {
+    return (
+      boundA.max.x >= boundB.min.x &&
+      boundA.max.y >= boundB.min.y &&
+      boundA.min.x <= boundB.max.x &&
+      boundA.min.y <= boundB.max.y
+    );
+  }
+
   render(ctx) {
-    ctx.strokeStyle = 'rgb(24,141,67)';
+    ctx.strokeStyle = '#00ffff48';
     ctx.strokeRect(this.min.x, this.min.y, this.width, this.height);
   }
 }

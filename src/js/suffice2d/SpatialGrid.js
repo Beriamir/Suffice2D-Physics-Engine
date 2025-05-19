@@ -153,7 +153,7 @@ export class SpatialGrid {
     }
     ctx.stroke();
 
-    ctx.fillStyle = '#8708082e';
+    ctx.fillStyle = '#5252522e';
     for (let i = 0; i < this.grid.length; ++i) {
       if (this.grid[i].length > 0) {
         const x = i % this.columns;

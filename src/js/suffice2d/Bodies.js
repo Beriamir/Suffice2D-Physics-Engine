@@ -3,6 +3,7 @@ import { Vertices } from './Vertices.js';
 import { Vec2 } from './Vec2.js';
 
 export const Bodies = {
+  ids: -1,
   circle: function (x, y, radius, option = {}) {
     if (typeof option != 'object') {
       console.warn(`
@@ -17,6 +18,7 @@ export const Bodies = {
     }
 
     const properties = {
+      id: ++Bodies.ids,
       label: 'circle',
       type: 'rigid',
       position: new Vec2(x, y),
@@ -49,6 +51,7 @@ export const Bodies = {
     ];
 
     const properties = {
+      id: ++Bodies.ids,
       label: 'rectangle',
       type: 'rigid',
       position: new Vec2(x, y),
@@ -90,6 +93,7 @@ export const Bodies = {
     ];
 
     const properties = {
+      id: ++Bodies.ids,
       label: 'capsule',
       type: 'rigid',
       position: new Vec2(x, y),
@@ -128,6 +132,7 @@ export const Bodies = {
     const direction = Vec2.subtract(vertices[0], centroid);
     const axisPoint = Vec2.add(centroid, direction);
     const properties = {
+      id: ++Bodies.ids,
       label: 'polygon',
       type: 'rigid',
       position: new Vec2(centroid.x, centroid.y),

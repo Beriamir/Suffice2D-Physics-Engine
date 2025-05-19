@@ -4,6 +4,7 @@ import { Collision } from './Collision.js';
 import { Solver } from './Solver.js';
 import { World } from './World.js';
 import { Animator } from './Animator.js';
+import { Event } from './Event.js';
 
 export class Engine {
   constructor(option = {}) {
@@ -22,6 +23,9 @@ export class Engine {
       option.bound.height ?? innerHeight,
       option.bound.scale ?? 50
     );
+
+    this.event = new Event();
+    this.contactPairs = [];
   }
 
   renderGrid(ctx) {
@@ -34,30 +38,96 @@ export class Engine {
     ctx.fill();
   }
 
-  run(deltaTime = 1000 / 60, ctx = {}) {
+  forEach(callback) {
+    for (let i = 0; i < this.world.collections.length; ++i) {
+      const body = this.world.collections[i];
+
+      callback(body);
+    }
+  }
+
+  run(deltaTime = 1000 / 60) {
     deltaTime /= this.subSteps;
+    const newContactPairs = [];
 
     for (let subStep = 1; subStep <= this.subSteps; ++subStep) {
+      for (let i = 0; i < this.world.constraints.length; ++i) {
+        const constraint = this.world.constraints[i];
+
+        constraint.constrain(deltaTime);
+      }
+
       for (let i = 0; i < this.world.collections.length; ++i) {
         const bodyA = this.world.collections[i];
         const force = this.gravity;
         const acceleration = Vec2.scale(force, bodyA.inverseMass);
 
         bodyA.linearVelocity.add(acceleration, deltaTime);
+        if (!bodyA.isStatic) {
+          bodyA.addForce(bodyA.linearVelocity, deltaTime);
+        }
+        if (!bodyA.fixedRotation) {
+          bodyA.rotate(bodyA.angularVelocity * deltaTime);
+        }
         bodyA.contactPoints.length = 0;
         bodyA.edges.length = 0;
-
-        if (!bodyA.isStatic) bodyA.addForce(bodyA.linearVelocity, deltaTime);
-        if (bodyA.rotation) bodyA.rotate(bodyA.angularVelocity * deltaTime);
 
         const nearby = this.grid.queryNearby(bodyA);
 
         for (const bodyB of nearby) {
+          if (
+            !bodyA.allowContact &&
+            !bodyB.allowContact &&
+            bodyA.jointId === bodyB.jointId
+          ) {
+            continue;
+          }
+
           const manifold = this._detectCollision(bodyA, bodyB);
 
-          if (manifold) {
-            Solver.solveCollision(bodyA, bodyB, manifold);
+          if (!manifold) continue;
+
+          const idA = bodyA.id;
+          const idB = bodyB.id;
+          const key = idA < idB ? idA * 1_000_000 + idB : idB * 1_000_000 + idA;
+          const contactPair = {
+            key,
+            bodyA,
+            bodyB
+          };
+
+          let exists = false;
+          for (let i = 0; i < this.contactPairs.length; ++i) {
+            if (contactPair.key === this.contactPairs[i].key) {
+              exists = true;
+              break;
+            }
           }
+
+          newContactPairs.push(contactPair);
+
+          if (!exists) {
+            this.event.emit('collisionStart', { bodyA, bodyB });
+            if (bodyA.onCollisionStart) {
+              bodyA.onCollisionStart(bodyB);
+            }
+          } else {
+            this.event.emit('collisionActive', { bodyA, bodyB });
+            if (bodyA.onCollisionActive) {
+              bodyA.onCollisionActive(bodyB);
+            }
+          }
+
+          if (
+            bodyA.isSensor ||
+            bodyB.isSensor ||
+            (bodyA.isStatic && bodyB.isStatic)
+          ) {
+            continue;
+          }
+
+          Solver.removeOverlap(bodyA, bodyB, manifold);
+          Solver.solveCollision(bodyA, bodyB, manifold);
         }
 
         if (subStep == 1) {
@@ -79,35 +149,33 @@ export class Engine {
         }
       }
     }
-  }
 
-  _getCollisionType(labelA, labelB) {
-    if (labelA == 'circle' && labelB == 'circle') return 'circle-circle';
+    for (let i = 0; i < this.contactPairs.length; ++i) {
+      const old = this.contactPairs[i];
+      let exists = false;
 
-    if (labelA == 'circle' && (labelB == 'rectangle' || labelB == 'polygon')) {
-      return 'circle-polygon';
+      for (let j = 0; j < newContactPairs.length; ++j) {
+        const newPair = newContactPairs[j];
+
+        if (newPair.key === old.key) {
+          exists = true;
+          break;
+        }
+      }
+
+      if (!exists) {
+        this.event.emit('collisionEnd', { bodyA: old.bodyA, bodyB: old.bodyB });
+        if (old.bodyA.onCollisionEnd) {
+          old.bodyA.onCollisionEnd(old.bodyB);
+        }
+      }
     }
 
-    if (
-      (labelA == 'rectangle' || labelA == 'polygon') &&
-      (labelB == 'rectangle' || labelB == 'polygon')
-    ) {
-      return 'polygon-polygon';
-    }
-
-    if ((labelA == 'rectangle' || labelA == 'polygon') && labelB == 'capsule') {
-      return 'polygon-capsule';
-    }
-
-    if (labelA == 'circle' && labelB == 'capsule') return 'circle-capsule';
-
-    if (labelA == 'capsule' && labelB == 'capsule') return 'capsule-capsule';
-
-    return 'unknown';
+    this.contactPairs = newContactPairs;
   }
 
   _detectCollision(bodyA, bodyB) {
-    const collisionType = this._getCollisionType(bodyA.label, bodyB.label);
+    const collisionType = Collision.getCollisionType(bodyA.label, bodyB.label);
 
     switch (collisionType) {
       case 'circle-circle': {

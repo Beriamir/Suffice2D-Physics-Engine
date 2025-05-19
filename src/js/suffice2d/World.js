@@ -2,6 +2,11 @@ export class World {
   constructor(engine) {
     this.engine = engine;
     this.collections = [];
+    this.constraints = [];
+  }
+  
+  addConstraint(constraint) {
+    this.constraints.push(constraint);
   }
 
   addBody(body) {

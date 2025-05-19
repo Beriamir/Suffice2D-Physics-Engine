@@ -1,6 +1,37 @@
 import { Vec2 } from './Vec2.js';
 
 export class Collision {
+  static _clamp(value, min = 0, max = 1) {
+    return value > max ? max : value < min ? min : value;
+  }
+
+  static getCollisionType(labelA, labelB) {
+    if (labelA == 'circle' && labelB == 'circle') {
+      return 'circle-circle';
+    }
+
+    if (labelA == 'circle' && (labelB == 'rectangle' || labelB == 'polygon')) {
+      return 'circle-polygon';
+    }
+
+    if (
+      (labelA == 'rectangle' || labelA == 'polygon') &&
+      (labelB == 'rectangle' || labelB == 'polygon')
+    ) {
+      return 'polygon-polygon';
+    }
+
+    if ((labelA == 'rectangle' || labelA == 'polygon') && labelB == 'capsule') {
+      return 'polygon-capsule';
+    }
+
+    if (labelA == 'circle' && labelB == 'capsule') return 'circle-capsule';
+
+    if (labelA == 'capsule' && labelB == 'capsule') return 'capsule-capsule';
+
+    return 'unknown';
+  }
+
   static _getClosestPoint(targetPoint, vertices) {
     let minDistanceSq = Infinity;
     let minIndex = -1;

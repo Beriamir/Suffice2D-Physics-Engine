@@ -20,12 +20,15 @@ export class Mouse {
     }
   }
 
-  moveBody(scalar = 1) {
+  constrainBody(force = 1) {
+    if (force > 1) force = 1;
+    else if (force < 0) force = 0; 
+    
     if (this.selectedBody) {
-      this.selectedBody.addGrabForce(
+      this.selectedBody.addAnchorForce(
         this.selectedAnchor,
         this.position,
-        scalar * 1000
+        force
       );
     }
   }

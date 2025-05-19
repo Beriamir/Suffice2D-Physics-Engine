@@ -6,5 +6,6 @@ import { Collision } from './Collision.js'
 import { Solver } from './Solver.js'
 import { Vertices } from './Vertices.js'
 import { Mouse } from './Mouse.js'
+import { Constraints } from './Constraints.js'
 
-export { Mouse, Solver, Engine, Bodies, Vec2, Bnd2, Collision, Vertices }
+export { Constraints, Mouse, Solver, Engine, Bodies, Vec2, Bnd2, Collision, Vertices }

@@ -50,7 +50,7 @@ export class Vec2 {
   }
 
   equal(v) {
-    const epsilon = 1e-12;
+    const epsilon = 1e-2;
     return Vec2.distanceSq(this, v) <= epsilon;
   }
 
@@ -96,8 +96,8 @@ export class Vec2 {
     return this.x * v.x + this.y * v.y;
   }
 
-  cross(v) {
-    return this.x * v.y - this.y * v.x;
+  cross(v, scalar = 1) {
+    return this.x * (v.y * scalar) - this.y * (v.x * scalar);
   }
 
   magnitude() {
@@ -140,17 +140,17 @@ export class Vec2 {
 
   static distance(v1, v2) {
     const dir = Vec2.subtract(v1, v2);
-    return Math.sqrt(dir.x ** 2 + dir.y ** 2);
+    return Math.sqrt(dir.x * dir.x + dir.y * dir.y);
   }
 
   static distanceSq(v1, v2) {
     const dir = Vec2.subtract(v1, v2);
 
-    return dir.x ** 2 + dir.y ** 2;
+    return dir.x * dir.x + dir.y * dir.y;
   }
 
   static normalized(v, length = 0) {
-    length = length ? length : vector.magnitude();
+    length = length ? length : v.magnitude();
 
     if (length === 0) return new Vec2();
     else return Vec2.scale(v, 1 / length);

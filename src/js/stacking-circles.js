@@ -13,7 +13,7 @@ onload = function main() {
   let isRenderGrid = false;
   let isRenderDebug = false;
   let wireframe = true;
-  let restitution = 0.0;
+  let restitution = 1.0;
   let subSteps = 4;
   const engine = new suffice2d.Engine({
     subSteps,
@@ -74,7 +74,7 @@ onload = function main() {
       event.preventDefault();
 
       mouse.setPosition(event.touches[0].clientX, event.touches[0].clientY);
-      mouse.moveBody(2);
+      mouse.constrainBody(2);
 
       if (!mouse.selectedBody) {
         handleMouse();
@@ -108,7 +108,7 @@ onload = function main() {
     throttle(event => {
       event.preventDefault();
       mouse.setPosition(event.offsetX, event.offsetY);
-      mouse.moveBody(2);
+      mouse.constrainBody(2);
 
       if (!mouse.selectedBody) {
         handleMouse();
@@ -140,7 +140,7 @@ onload = function main() {
     const radius = maxSize * 0.5;
     const option = {
       isStatic: true,
-      rotation: false,
+      fixedRotation: true,
       wireframe
     };
     const walls = {

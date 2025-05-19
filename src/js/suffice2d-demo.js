@@ -11,7 +11,7 @@ let renderDebug = false;
 let restitution = 0.5;
 let subSteps = 4;
 let gravity = 9.81;
-const bodySize = 40;
+const bodySize = 50;
 
 const engine = new suffice2d.Engine({
   targetFPS,
@@ -71,7 +71,7 @@ document.addEventListener('DOMContentLoaded', function () {
   /**
    * Initialize
    */
-
+  let ground = null;
   let obstacle2 = null;
   function init() {
     world.empty();
@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', function () {
     showGrid = false;
     renderDebug = false;
 
-    const ground = new suffice2d.Bodies.rectangle(
+    ground = new suffice2d.Bodies.rectangle(
       canvasWidth * 0.45,
       canvasHeight * 0.9,
       50,
@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', function () {
       {
         wireframe,
         isStatic: true,
-        rotation: false
+        fixedRotation: true
       }
     );
     const obstacle1 = new suffice2d.Bodies.capsule(
@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', function () {
       {
         wireframe,
         isStatic: true,
-        rotation: true
+        fixedRotation: false
       }
     );
     obstacle2 = new suffice2d.Bodies.rectangle(
@@ -112,7 +112,7 @@ document.addEventListener('DOMContentLoaded', function () {
       {
         wireframe,
         isStatic: true,
-        rotation: false
+        fixedRotation: true
       }
     );
 
@@ -287,7 +287,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       case 'polygon': {
         const vertices = [];
-        const edgeCount = Math.floor(Math.random() * (9 - 3) + 3);
+        const edgeCount = 3; // Math.floor(Math.random() * (12 - 3) + 3);
 
         for (let i = 0; i < edgeCount; ++i) {
           const angle = (i * Math.PI * 2) / edgeCount;

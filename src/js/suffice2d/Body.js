@@ -1,13 +1,21 @@
 import { Vertices } from './Vertices.js';
 import { Vec2 } from './Vec2.js';
 import { Bnd2 } from './Bnd2.js';
+import { Collision } from './Collision.js';
 
 export class Body {
   constructor(properties, option = {}) {
+    this.type = 'rigidBody';
+    this.name = '';
+    this.tag = '';
+
     for (const property in properties) {
       const value = properties[property];
 
       switch (property) {
+        case 'id':
+          this.id = value;
+          break;
         case 'label':
           this.label = value;
           break;
@@ -86,7 +94,7 @@ export class Body {
         break;
     }
 
-    this.mass = this.density * this.area * this.thickness;
+    this.mass = option.mass ?? this.density * this.area * this.thickness;
 
     switch (this.label) {
       case 'circle':
@@ -110,7 +118,7 @@ export class Body {
         break;
       }
 
-      case 'capsule': {
+      /* case 'capsule': {
         const radiusSq = this.radius ** 2;
         const rectInertia =
           0.0833333333 *
@@ -125,15 +133,40 @@ export class Body {
 
         this.inertia = rectInertia + 2 * semiTotalInertia;
         break;
+      } */
+
+      case 'capsule': {
+        const r = this.radius;
+        const h = this.height;
+        const w = 2 * r;
+        const thickness = this.thickness;
+        const density = this.density;
+
+        const rectArea = w * h;
+        const capArea = Math.PI * r * r;
+
+        const rectMass = density * rectArea * thickness;
+        const capMass = density * capArea * thickness;
+        const semiMass = capMass / 2;
+
+        const rectInertia = (1 / 12) * rectMass * (w * w + h * h);
+        const semiInertia = 0.25 * semiMass * r * r;
+        const semiOffset = semiMass * (h / 2) ** 2;
+
+        this.inertia = rectInertia + 2 * (semiInertia + semiOffset);
+        break;
       }
     }
 
     this.inverseMass = 1 / this.mass;
     this.inverseInertia = 1 / this.inertia;
 
-    this.wireframe = option.wireframe ?? false;
-    this.rotation = option.rotation ?? true;
+    this.isSensor = option.isSensor ?? false;
     this.isStatic = option.isStatic ?? false;
+    this.allowContact = true;
+    this.fixedRotation = option.fixedRotation ?? false;
+    this.wireframe = option.wireframe ?? false;
+    this.jointId = Math.random() * 10276262;
     this.color = option.color ?? `hsla(${Math.random() * 360}, 100%, 50%, 70%)`;
 
     if (this.isStatic) {
@@ -142,15 +175,25 @@ export class Body {
       this.color = option.color ?? 'hsla(0,0%,51.4%,70%)';
     }
 
-    if (!this.rotation) {
+    if (this.fixedRotation) {
       this.inverseInertia = 0;
     }
 
+    this.rotation = 0;
     this.bound = new Bnd2(this);
     this.contactPoints = [];
     this.edges = [];
     this.anchorPoints = [];
     this.anchorPointId = -1;
+    this.anchorPairs = [];
+
+    this.onCollisionStart = null;
+    this.onCollisionActive = null;
+    this.onCollisionEnd = null;
+  }
+
+  static _clamp(value, min = 0, max = 1) {
+    return value > max ? max : value < min ? min : value;
   }
 
   addAnchorPoint(point) {
@@ -173,23 +216,137 @@ export class Body {
     }
   }
 
-  addGrabForce(anchorPoint, targetPoint, scalar = 1) {
-    const normal = Vec2.subtract(targetPoint, this.position).normalize();
-    const leverArm = Vec2.subtract(anchorPoint, this.position);
-    const torque = leverArm.cross(normal);
+  containsAnchor(anchor) {
+    let contains = false;
 
-    if (!this.isStatic)
-      this.linearVelocity.add(normal, scalar * this.inverseMass);
-    if (this.rotation)
-      this.angularVelocity += torque * scalar * this.inverseInertia;
+    switch (this.label) {
+      case 'circle': {
+        const distanceSq = Vec2.distanceSq(this.position, anchor);
+        const radiusSq = this.radius * this.radius;
+
+        if (distanceSq < radiusSq) {
+          contains = true;
+        }
+
+        break;
+      }
+      case 'rectangle':
+      case 'polygon': {
+        const n = this.vertices.length;
+        contains = true;
+
+        for (let i = 0; i < n; ++i) {
+          const a = this.vertices[i];
+          const b = this.vertices[(i + 1) % n];
+
+          const ab = Vec2.subtract(b, a);
+          const ap = Vec2.subtract(anchor, a);
+          const cross = ab.cross(ap);
+
+          if (cross < 0) {
+            contains = false;
+            break;
+          }
+        }
+
+        break;
+      }
+
+      case 'capsule': {
+        const ab = Vec2.subtract(this.endPoint, this.startPoint);
+        const ap = Vec2.subtract(anchor, this.startPoint);
+        const abLengthSq = ab.magnitudeSq();
+        const projection = ap.dot(ab) / abLengthSq;
+        const contactPoint = ab.scale(projection).add(this.startPoint);
+
+        if (projection < 0) {
+          contactPoint.copy(this.startPoint);
+        } else if (projection > 1) {
+          contactPoint.copy(this.endPoint);
+        }
+
+        const distanceSq = Vec2.distanceSq(contactPoint, anchor);
+        const radiusSq = this.radius * this.radius;
+
+        if (distanceSq < radiusSq) {
+          contains = true;
+        }
+
+        break;
+      }
+    }
+
+    return contains;
+  }
+
+  addAnchorForce(anchorA, anchorB, stiffness = 0.5) {
+    const delta = Vec2.subtract(anchorB, anchorA);
+    const distance = delta.magnitude();
+
+    if (distance < 1) return;
+
+    const normal = delta.scale(1 / distance);
+    
+    const vA = this.linearVelocity;
+    const wA = this.angularVelocity;
+    const mA = this.inverseMass;
+    const iA = this.inverseInertia;
+    const staticFriction = this.friction.static;
+    const kineticFriction = this.friction.kinetic;
+
+    const rA = Vec2.subtract(anchorA, this.position);
+    const rAPerp = rA.perp();
+    const vTanA = Vec2.scale(rAPerp, wA);
+    const relVel = Vec2.subtract(new Vec2(), Vec2.add(vA, vTanA));
+    const velNormal = relVel.dot(normal);
+
+    const tangent = Vec2.subtract(
+      relVel,
+      Vec2.scale(normal, velNormal)
+    ).normalize();
+
+    const rnA = rAPerp.dot(normal);
+    const rtA = rAPerp.dot(tangent);
+    const effMassN = mA + rnA * rnA * iA;
+    const effMassT = mA + rtA * rtA * iA;
+
+    if (effMassN === 0 || effMassT === 0) {
+      return;
+    }
+
+    const beta = 0.001;
+    const correction = stiffness * distance * beta;
+    const impulse = velNormal + correction / effMassN;
+    let friction = relVel.dot(tangent) / effMassT;
+
+    const maxStatic = impulse * staticFriction;
+    const maxKinetic = impulse * kineticFriction;
+
+    if (Math.abs(friction) > maxStatic) {
+      friction = Body._clamp(friction, -maxKinetic, maxKinetic);
+    } else {
+      friction = Body._clamp(friction, -maxStatic, maxStatic);
+    }
+
+    const torqueN = rnA * impulse * iA;
+    const torqueT = rtA * friction * iA;
+
+    const impulseVector = Vec2.scale(normal, impulse * mA);
+    const frictionVector = Vec2.scale(tangent, friction * mA);
+
+    this.angularVelocity += torqueN;
+    this.angularVelocity += torqueT;
+
+    this.linearVelocity.add(impulseVector);
+    this.linearVelocity.add(frictionVector);
   }
 
   renderAnchorPoints(ctx) {
-    ctx.fillStyle = 'white';
+    ctx.strokeStyle = 'white';
     this.anchorPoints.forEach(point => {
       ctx.beginPath();
-      ctx.arc(point.x, point.y, 2, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.arc(point.x, point.y, 3, 0, Math.PI * 2);
+      ctx.stroke();
     });
   }
 
@@ -222,6 +379,7 @@ export class Body {
       point.copy(point.subtract(this.position).rotate(angle).add(this.position))
     );
 
+    this.rotation += angle;
     this.bound.update();
   }
 
@@ -236,6 +394,7 @@ export class Body {
       this.allVertices.push(...this.vertices, this.axisPoint);
 
       this.bound.update();
+      this.label = 'polygon';
     }
   }
 
@@ -316,6 +475,7 @@ export class Body {
           startAngle
         );
         ctx.closePath();
+
         break;
       }
     }
@@ -328,38 +488,31 @@ export class Body {
       ctx.lineTo(this.endPoint.x, this.endPoint.y);
     }
 
+    for (let i = 0; i < this.anchorPairs.length; ++i) {
+      const pairs = this.anchorPairs[i];
+
+      ctx.moveTo(pairs.anchorA.x, pairs.anchorA.y);
+      ctx.lineTo(pairs.anchorB.x, pairs.anchorB.y);
+    }
+
     if (!this.wireframe) {
-      // const gradient = ctx.createRadialGradient(
-      //   this.position.x,
-      //   this.position.y,
-      //   0,
-      //   this.position.x,
-      //   this.position.y,
-      //   this.radius ?? 0
-      // );
-
-      // gradient.addColorStop(0, '#e8e8e8');
-      // gradient.addColorStop(1, this.color);
-
       ctx.fillStyle = this.color;
       ctx.fill();
       ctx.strokeStyle = '#ffffffc0';
       ctx.stroke();
     } else {
-      ctx.strokeStyle = this.isSleeping ? '#ffffff50' : '#ffffffc0';
+      ctx.strokeStyle = this.isSleeping ? '#ffffff56' : '#ffffff9c';
       ctx.stroke();
     }
+
+    this.renderAnchorPoints(ctx);
   }
 
   renderContacts(ctx) {
-    ctx.fillStyle = 'orange';
-    ctx.strokeStyle = 'orange';
+    ctx.fillStyle = 'cyan';
+    ctx.strokeStyle = 'cyan';
 
     this.contactPoints.forEach(point => {
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, 2, 0, Math.PI * 2);
-      ctx.fill();
-
       switch (this.label) {
         // Circle Edge
         case 'circle': {
@@ -424,6 +577,11 @@ export class Body {
           break;
         }
       }
+
+      // Contact Point
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 2, 0, Math.PI * 2);
+      ctx.fill();
     });
 
     // Polygon Edge
@@ -431,9 +589,6 @@ export class Body {
       ctx.beginPath();
       ctx.moveTo(edge[0].x, edge[0].y);
       ctx.lineTo(edge[1].x, edge[1].y);
-      if (edge.length === 3) {
-        ctx.lineTo(edge[2].x, edge[2].y);
-      }
       ctx.stroke();
     });
   }
@@ -447,7 +602,7 @@ export class Body {
       this.position.x + this.linearVelocity.x * maxLength,
       this.position.y + this.linearVelocity.y * maxLength
     );
-    ctx.strokeStyle = 'orange';
+    ctx.strokeStyle = 'cyan';
     ctx.stroke();
   }
 
@@ -455,6 +610,5 @@ export class Body {
     this.bound.render(ctx);
     this.renderContacts(ctx);
     this.renderVelocity(ctx);
-    this.renderAnchorPoints(ctx);
   }
 }

@@ -26,13 +26,13 @@ onload = function main() {
     }
   });
 
-  const mouse = new suffice2d.Mouse(canvasWidth / 2, canvasHeight / 2);
+  const mouse = new suffice2d.Hand(canvasWidth / 2, canvasHeight / 2);
 
   canvas.addEventListener('touchstart', function (event) {
     mouse.setPosition(event.touches[0].clientX, event.touches[0].clientY);
 
     engine.world.collections.forEach(body => {
-      if (body.bound.contains(mouse.position)) {
+      if (body.containsAnchor(mouse.position)) {
         mouse.grabBody(body);
 
         return null;
@@ -44,7 +44,7 @@ onload = function main() {
 
   canvas.addEventListener('touchmove', function (event) {
     mouse.setPosition(event.touches[0].clientX, event.touches[0].clientY);
-    mouse.moveBody(grabForce);
+    mouse.constrainBody(grabForce);
     spawnFastBodies();
   });
 
@@ -57,7 +57,7 @@ onload = function main() {
     const minHeight = 5;
     const option = {
       isStatic: true,
-      rotation: false,
+      fixedRotation: true,
       wireframe
     };
 
@@ -107,11 +107,11 @@ onload = function main() {
   function spawnFastBodies() {
     const radius = bulletRadius;
     const speed = 10;
-    const body = new suffice2d.Bodies.circle(
+    const body = new suffice2d.Bodies.capsule(
       canvasWidth * 0.5,
       canvasHeight - radius,
       radius,
-      // radius * 2,
+      radius * 2,
       {
         density: bulletDensity,
         wireframe,
