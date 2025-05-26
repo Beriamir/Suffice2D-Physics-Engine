@@ -7,13 +7,13 @@ onload = function main() {
   let canvasWidth = innerWidth;
   let canvasHeight = innerHeight;
 
-  const maxSize = 25;
-  const minSize = 20;
+  const maxSize = 50;
+  const minSize = 40;
 
   let isRenderGrid = false;
   let isRenderDebug = false;
   let wireframe = true;
-  let restitution = 1.0;
+  let restitution = 0.4;
   let subSteps = 4;
   const engine = new suffice2d.Engine({
     subSteps,
@@ -57,7 +57,7 @@ onload = function main() {
 
     mouse.setPosition(event.touches[0].clientX, event.touches[0].clientY);
     engine.world.collections.forEach(body => {
-      if (body.bound.contains(mouse.position)) {
+      if (body.containsAnchor(mouse.position)) {
         mouse.grabBody(body);
         return null;
       }
@@ -74,7 +74,7 @@ onload = function main() {
       event.preventDefault();
 
       mouse.setPosition(event.touches[0].clientX, event.touches[0].clientY);
-      mouse.constrainBody(2);
+      mouse.constrainBody();
 
       if (!mouse.selectedBody) {
         handleMouse();
@@ -108,7 +108,7 @@ onload = function main() {
     throttle(event => {
       event.preventDefault();
       mouse.setPosition(event.offsetX, event.offsetY);
-      mouse.constrainBody(2);
+      mouse.constrainBody();
 
       if (!mouse.selectedBody) {
         handleMouse();
@@ -130,49 +130,52 @@ onload = function main() {
       wireframe,
       restitution
     };
-    const body = new suffice2d.Bodies.circle(x, y, size, option);
+    const circle = new suffice2d.RigidBodies.circle(x, y, size * 0.5, option);
+    const rect = new suffice2d.RigidBodies.rectangle(x, y, size, size, option);
 
-    engine.world.addBody(body);
+    engine.world.addBodies([circle, rect]);
   }
 
   function init() {
     // Create static bodies (Capsules)
-    const radius = maxSize * 0.5;
+    const radius = 20;
     const option = {
       isStatic: true,
-      fixedRotation: true,
+      fixedRot: true,
       wireframe
     };
     const walls = {
       // GROUND
-      0: new suffice2d.Bodies.capsule(
+      0: new suffice2d.RigidBodies.capsule(
         canvasWidth * 0.5,
-        canvasHeight - radius * 2,
+        canvasHeight,
         radius,
-        canvasWidth - radius * 4,
-        option
+        canvasWidth,
+        {
+          rotation: -Math.PI * 0.5,
+          ...option
+        }
       ),
       // Left
-      1: new suffice2d.Bodies.capsule(
-        radius * 2,
+      1: new suffice2d.RigidBodies.capsule(
+        0,
         canvasHeight * 0.5,
         radius,
-        canvasHeight - radius * 4,
+        canvasHeight,
         option
       ),
       // Right
-      2: new suffice2d.Bodies.capsule(
-        canvasWidth - radius * 2,
+      2: new suffice2d.RigidBodies.capsule(
+        canvasWidth,
         canvasHeight * 0.5,
         radius,
-        canvasHeight - radius * 4,
+        canvasHeight,
         option
       ),
       length: 3
     };
 
-    walls[0].rotate(-Math.PI / 2); // Ground
-
+    
     engine.world.addBodies(Array.from(walls));
   }
 
@@ -183,7 +186,7 @@ onload = function main() {
 
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
     if (isRenderGrid) engine.renderGrid(ctx);
-    engine.world.collections.forEach(body => {
+    engine.world.forEach(body => {
       body.render(ctx);
       if (isRenderDebug) body.renderDebug(ctx);
     });

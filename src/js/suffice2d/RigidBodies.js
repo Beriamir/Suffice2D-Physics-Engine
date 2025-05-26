@@ -1,13 +1,13 @@
-import { Body } from './Body.js';
+import { RigidBody } from './RigidBody.js';
 import { Vertices } from './Vertices.js';
 import { Vec2 } from './Vec2.js';
 
-export const Bodies = {
+export const RigidBodies = {
   ids: -1,
   circle: function (x, y, radius, option = {}) {
     if (typeof option != 'object') {
       console.warn(`
-        Bodies.circle( 
+        RigidBodies.circle( 
           x: Number, 
           y: Number, 
           radius: Number
@@ -18,21 +18,20 @@ export const Bodies = {
     }
 
     const properties = {
-      id: ++Bodies.ids,
+      id: ++RigidBodies.ids,
       label: 'circle',
-      type: 'rigid',
       position: new Vec2(x, y),
       axisPoint: new Vec2(x + radius, y),
       radius: radius
     };
 
-    return new Body(properties, option);
+    return new RigidBody(properties, option);
   },
 
   rectangle: function (x, y, width, height, option = {}) {
     if (typeof option != 'object') {
       console.warn(`
-        Bodies.rectangle( 
+        RigidBodies.rectangle( 
           x: Number, 
           y: Number, 
           width: Number, 
@@ -51,9 +50,8 @@ export const Bodies = {
     ];
 
     const properties = {
-      id: ++Bodies.ids,
+      id: ++RigidBodies.ids,
       label: 'rectangle',
-      type: 'rigid',
       position: new Vec2(x, y),
       axisPoint: new Vec2(
         width > height
@@ -68,13 +66,13 @@ export const Bodies = {
       height: height
     };
 
-    return new Body(properties, option);
+    return new RigidBody(properties, option);
   },
 
   capsule: function (x, y, radius, height, option = {}) {
     if (typeof option != 'object') {
       console.warn(`
-        Bodies.capsule( 
+        RigidBodies.capsule( 
           x: Number, 
           y: Number, 
           radius: Number,
@@ -93,9 +91,8 @@ export const Bodies = {
     ];
 
     const properties = {
-      id: ++Bodies.ids,
+      id: ++RigidBodies.ids,
       label: 'capsule',
-      type: 'rigid',
       position: new Vec2(x, y),
       startPoint: new Vec2(x, y - height * 0.5),
       endPoint: new Vec2(x, y + height * 0.5),
@@ -104,13 +101,13 @@ export const Bodies = {
       height: height
     };
 
-    return new Body(properties, option);
+    return new RigidBody(properties, option);
   },
 
   polygon: function (vertices = [], option = {}) {
     if (typeof option != 'object') {
       console.log(`
-        Bodies.polygon( 
+        RigidBodies.polygon( 
           vertices: [{x, y}]
           option: {}
         )
@@ -132,28 +129,27 @@ export const Bodies = {
     const direction = Vec2.subtract(vertices[0], centroid);
     const axisPoint = Vec2.add(centroid, direction);
     const properties = {
-      id: ++Bodies.ids,
+      id: ++RigidBodies.ids,
       label: 'polygon',
-      type: 'rigid',
       position: new Vec2(centroid.x, centroid.y),
       axisPoint: axisPoint,
       vertices: vertices,
       radius: Math.abs(direction.x)
     };
 
-    return new Body(properties, option);
+    return new RigidBody(properties, option);
   },
 
   log: function () {
     console.log(`
-      Bodies.circle( 
+      RigidBodies.circle( 
         x: Number, 
         y: Number, 
         radius: Number,
         option: {}
       )
       
-      Bodies.rectangle( 
+      RigidBodies.rectangle( 
         x: Number, 
         y: Number, 
         width: Number,
@@ -161,7 +157,7 @@ export const Bodies = {
         option: {}
       )
       
-      Bodies.capsule( 
+      RigidBodies.capsule( 
         x: Number, 
         y: Number, 
         radius: Number,
@@ -169,7 +165,7 @@ export const Bodies = {
         option: {}
       )
       
-      Bodies.polygon( 
+      RigidBodies.polygon( 
         vertices: [{x, y}]
         option: {}
       )

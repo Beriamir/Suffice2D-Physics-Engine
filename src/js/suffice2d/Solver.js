@@ -1,25 +1,18 @@
 import { Vec2 } from './Vec2.js';
+import { Utils } from './Utils.js';
 
 export class Solver {
-  static _clamp(value, min = 0, max = 1) {
-    return value > max ? max : value < min ? min : value;
-  }
-
-  static removeOverlap(bodyA, bodyB, manifold) {
-    const { normal, overlapDepth: overlap } = manifold;
+  static solveCollision(bodyA, bodyB, manifold) {
+    const { normal, overlapDepth, contactPoints } = manifold;
 
     if (bodyA.isStatic && !bodyB.isStatic) {
-      bodyB.addForce(normal, overlap);
+      bodyB.translate(normal, overlapDepth);
     } else if (!bodyA.isStatic && bodyB.isStatic) {
-      bodyA.addForce(normal, -overlap);
+      bodyA.translate(normal, -overlapDepth);
     } else if (!bodyA.isStatic && !bodyB.isStatic) {
-      bodyA.addForce(normal, -overlap * 0.5);
-      bodyB.addForce(normal, overlap * 0.5);
+      bodyA.translate(normal, -overlapDepth * 0.5);
+      bodyB.translate(normal, overlapDepth * 0.5);
     }
-  }
-
-  static solveCollision(bodyA, bodyB, manifold) {
-    const { normal, overlapDepth: overlap, contactPoints } = manifold;
 
     const vA = bodyA.linearVelocity;
     const vB = bodyB.linearVelocity;
@@ -38,19 +31,13 @@ export class Solver {
     const friction = [];
 
     const restitution = Math.min(bodyA.restitution, bodyB.restitution);
-    const staticFriction = Math.min(
-      bodyA.friction.static,
-      bodyB.friction.static
-    );
+    const staticFriction = Math.min(bodyA.staticFriction, bodyB.staticFriction);
     const kineticFriction = Math.min(
-      bodyA.friction.kinetic,
-      bodyB.friction.kinetic
+      bodyA.kineticFriction,
+      bodyB.kineticFriction
     );
 
     const contactNum = contactPoints.length;
-    const biasFactor = 0.02;
-    const biasSlop = 0.8;
-    const impulseBias = this._clamp(overlap - biasSlop, 0, 1) * biasFactor;
 
     // Compute Impulses
     for (let i = 0; i < contactNum; ++i) {
@@ -88,20 +75,20 @@ export class Solver {
         continue;
       }
 
-      impulse[i] = (-(1 + restitution) * velNormal + impulseBias) / effMassN;
+      const beta = 0.02;
+      const slop = overlapDepth * 0.8;
+      const bias = Math.max(overlapDepth - slop, 0) * beta;
+
+      impulse[i] = (-(1 + restitution) * velNormal + bias) / effMassN;
       friction[i] = -relVel.dot(tangent[i]) / effMassT;
 
-      const maxStatic = impulse[i] * staticFriction;
-      const maxKinetic = impulse[i] * kineticFriction;
-
       // Clamp Friction
-      if (friction[i] > maxStatic) {
-        friction[i] = this._clamp(friction[i], -maxKinetic, maxKinetic);
-      } else if (friction[i] < -maxStatic) {
-        friction[i] = this._clamp(friction[i], -maxKinetic, maxKinetic);
-      } else {
-        friction[i] = this._clamp(friction[i], -maxStatic, maxStatic);
+      if (Math.abs(friction[i]) >= impulse[i] * staticFriction) {
+        friction[i] = -impulse[i] * kineticFriction;
       }
+
+      impulse[i] /= contactNum;
+      friction[i] /= contactNum;
     }
 
     // Apply Impulses

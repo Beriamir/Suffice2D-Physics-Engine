@@ -3,7 +3,7 @@ import { Vec2 } from './Vec2.js';
 import { Bnd2 } from './Bnd2.js';
 import { Collision } from './Collision.js';
 
-export class Body {
+export class RigidBody {
   constructor(properties, option = {}) {
     this.type = 'rigidBody';
     this.name = '';
@@ -18,9 +18,6 @@ export class Body {
           break;
         case 'label':
           this.label = value;
-          break;
-        case 'type':
-          this.type = value;
           break;
         case 'position':
           this.position = value;
@@ -60,22 +57,8 @@ export class Body {
     this.linearVelocity = option.linearVelocity ?? new Vec2();
     this.angularVelocity = option.angularVelocity ?? 0;
 
-    let defaultFriction = null;
-    switch (this.label) {
-      case 'circle':
-        defaultFriction = { static: 0.6, kinetic: 0.4 };
-        break;
-
-      case 'rectangle':
-      case 'polygon':
-        defaultFriction = { static: 9, kinetic: 7 };
-        break;
-
-      case 'capsule':
-        defaultFriction = { static: 0.6, kinetic: 0.4 };
-        break;
-    }
-    this.friction = option.friction ?? defaultFriction;
+    this.staticFriction = option.staticFriction ?? 0.6;
+    this.kineticFriction = option.kineticFriction ?? 0.4;
     this.restitution = option.restitution ?? 0.0;
     this.density = option.density ?? 2700;
     this.thickness = option.thickness ?? 0.01;
@@ -111,49 +94,22 @@ export class Body {
         this.vertices.length < 4
           ? (this.inertia =
               0.0555555556 * this.mass * (radiusSq * 2 + radiusSq * 2))
-          : this.vertices.length == 4
+          : this.vertices.length === 4
           ? (this.inertia =
               0.0833333333 * this.mass * (radiusSq * 2 + radiusSq * 2))
           : (this.inertia = Vertices.inertia(this.vertices, this.mass));
         break;
       }
 
-      /* case 'capsule': {
-        const radiusSq = this.radius ** 2;
-        const rectInertia =
-          0.0833333333 *
-          this.density *
-          Vertices.area(this.vertices) *
-          this.thickness *
-          (radiusSq * 2 + this.height ** 2);
-        const semiMass =
-          this.density * Math.PI * radiusSq * this.thickness * 0.5;
-        const semiInertia = 0.125 * semiMass * radiusSq;
-        const semiTotalInertia = semiInertia + semiMass * radiusSq;
-
-        this.inertia = rectInertia + 2 * semiTotalInertia;
-        break;
-      } */
-
       case 'capsule': {
-        const r = this.radius;
-        const h = this.height;
-        const w = 2 * r;
-        const thickness = this.thickness;
-        const density = this.density;
+        const circleInertia = 0.5 * this.mass * this.radius * this.radius;
+        const width = this.radius * 2;
+        const rectangleInertia =
+          0.0833333333 *
+          this.mass *
+          (width * width + this.height * this.height);
 
-        const rectArea = w * h;
-        const capArea = Math.PI * r * r;
-
-        const rectMass = density * rectArea * thickness;
-        const capMass = density * capArea * thickness;
-        const semiMass = capMass / 2;
-
-        const rectInertia = (1 / 12) * rectMass * (w * w + h * h);
-        const semiInertia = 0.25 * semiMass * r * r;
-        const semiOffset = semiMass * (h / 2) ** 2;
-
-        this.inertia = rectInertia + 2 * (semiInertia + semiOffset);
+        this.inertia = circleInertia + rectangleInertia;
         break;
       }
     }
@@ -163,24 +119,25 @@ export class Body {
 
     this.isSensor = option.isSensor ?? false;
     this.isStatic = option.isStatic ?? false;
-    this.allowContact = true;
-    this.fixedRotation = option.fixedRotation ?? false;
+    this.fixedRot = option.fixedRot ?? false;
     this.wireframe = option.wireframe ?? false;
+    this.jointSelfCollision = true;
     this.jointId = Math.random() * 10276262;
-    this.color = option.color ?? `hsla(${Math.random() * 360}, 100%, 50%, 70%)`;
+    this.color = option.color ?? `hsla(${Math.random() * 360}, 100%, 50%, 0.5)`;
 
     if (this.isStatic) {
       this.inverseMass = 0;
-      this.restitution = option.restitution ?? 1;
-      this.color = option.color ?? 'hsla(0,0%,51.4%,70%)';
+      this.restitution = 1;
+      this.color = option.color ?? 'hsla(0, 0%, 51.4%, 0.5)';
     }
 
-    if (this.fixedRotation) {
+    if (this.fixedRot) {
       this.inverseInertia = 0;
     }
 
-    this.rotation = 0;
+    this.rotation = option.rotation ?? 0;
     this.bound = new Bnd2(this);
+
     this.contactPoints = [];
     this.edges = [];
     this.anchorPoints = [];
@@ -190,10 +147,8 @@ export class Body {
     this.onCollisionStart = null;
     this.onCollisionActive = null;
     this.onCollisionEnd = null;
-  }
 
-  static _clamp(value, min = 0, max = 1) {
-    return value > max ? max : value < min ? min : value;
+    this.rotate(this.rotation);
   }
 
   addAnchorPoint(point) {
@@ -279,20 +234,19 @@ export class Body {
     return contains;
   }
 
-  addAnchorForce(anchorA, anchorB, stiffness = 0.5) {
+  addAnchorVelocity(anchorA, anchorB, deltaTime = 1000 / 60) {
     const delta = Vec2.subtract(anchorB, anchorA);
     const distance = delta.magnitude();
 
     if (distance < 1) return;
 
     const normal = delta.scale(1 / distance);
-    
+    const correction = distance - 0;
+
     const vA = this.linearVelocity;
     const wA = this.angularVelocity;
     const mA = this.inverseMass;
     const iA = this.inverseInertia;
-    const staticFriction = this.friction.static;
-    const kineticFriction = this.friction.kinetic;
 
     const rA = Vec2.subtract(anchorA, this.position);
     const rAPerp = rA.perp();
@@ -314,40 +268,27 @@ export class Body {
       return;
     }
 
-    const beta = 0.001;
-    const correction = stiffness * distance * beta;
-    const impulse = velNormal + correction / effMassN;
+    const springiness = 0.9;
+    const beta = 0.1 / deltaTime;
+    const slop = correction * 0.9;
+    const bias = Math.max(correction - slop, 0) * beta;
+    let impulse = -((1 - springiness) * velNormal + bias) / effMassN;
     let friction = relVel.dot(tangent) / effMassT;
 
-    const maxStatic = impulse * staticFriction;
-    const maxKinetic = impulse * kineticFriction;
-
-    if (Math.abs(friction) > maxStatic) {
-      friction = Body._clamp(friction, -maxKinetic, maxKinetic);
-    } else {
-      friction = Body._clamp(friction, -maxStatic, maxStatic);
+    if (Math.abs(friction) >= impulse * this.staticFriction) {
+      friction = impulse * this.kineticFriction;
     }
 
     const torqueN = rnA * impulse * iA;
     const torqueT = rtA * friction * iA;
+    const impulseVector = Vec2.scale(normal, -impulse * mA);
+    const frictionVector = Vec2.scale(tangent, -friction * mA);
 
-    const impulseVector = Vec2.scale(normal, impulse * mA);
-    const frictionVector = Vec2.scale(tangent, friction * mA);
-
-    this.angularVelocity += torqueN;
-    this.angularVelocity += torqueT;
+    this.angularVelocity += -torqueN;
+    this.angularVelocity += -torqueT;
 
     this.linearVelocity.add(impulseVector);
     this.linearVelocity.add(frictionVector);
-  }
-
-  renderAnchorPoints(ctx) {
-    ctx.strokeStyle = 'white';
-    this.anchorPoints.forEach(point => {
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, 3, 0, Math.PI * 2);
-      ctx.stroke();
-    });
   }
 
   setPosition(x, y) {
@@ -356,86 +297,59 @@ export class Body {
 
     const offset = Vec2.subtract(this.position, this.prevPosition);
 
-    this.allVertices.forEach(point => point.add(offset));
+    for (let i = 0; i < this.allVertices.length; ++i) {
+      const vertex = this.allVertices[i];
+
+      vertex.add(offset);
+    }
+
+    for (let i = 0; i < this.anchorPoints.length; ++i) {
+      const vertex = this.anchorPoints[i];
+
+      vertex.add(offset);
+    }
+
     this.bound.update();
   }
 
-  addForce(force, scalar = 1) {
+  translate(force, scalar = 1) {
     this.prevPosition.copy(this.position);
     this.position.add(force, scalar);
-    this.allVertices.forEach(point => point.add(force, scalar));
-    this.anchorPoints.forEach(point => {
-      point.add(force, scalar);
-    });
+
+    for (let i = 0; i < this.allVertices.length; ++i) {
+      const vertex = this.allVertices[i];
+
+      vertex.add(force, scalar);
+    }
+
+    for (let i = 0; i < this.anchorPoints.length; ++i) {
+      const vertex = this.anchorPoints[i];
+
+      vertex.add(force, scalar);
+    }
 
     this.bound.update();
   }
 
   rotate(angle) {
-    this.allVertices.forEach(point =>
-      point.copy(point.subtract(this.position).rotate(angle).add(this.position))
-    );
-    this.anchorPoints.forEach(point =>
-      point.copy(point.subtract(this.position).rotate(angle).add(this.position))
-    );
+    for (let i = 0; i < this.allVertices.length; ++i) {
+      const vertex = this.allVertices[i];
+
+      vertex.copy(
+        vertex.subtract(this.position).rotate(angle).add(this.position)
+      );
+    }
+
+    for (let i = 0; i < this.anchorPoints.length; ++i) {
+      const vertex = this.anchorPoints[i];
+
+      vertex.copy(
+        vertex.subtract(this.position).rotate(angle).add(this.position)
+      );
+    }
 
     this.rotation += angle;
     this.bound.update();
-  }
-
-  roundCorner(radius) {
-    if (this.label == 'rectangle' || this.label == 'polygon') {
-      this.vertices = Vertices.chamfer(this.vertices, radius);
-
-      const direction = Vec2.subtract(this.vertices[0], this.position);
-
-      this.axisPoint.copy(this.position.clone().add(direction));
-      this.allVertices = [];
-      this.allVertices.push(...this.vertices, this.axisPoint);
-
-      this.bound.update();
-      this.label = 'polygon';
-    }
-  }
-
-  furthestPointInDir(direction) {
-    const maxPoint = new Vec2();
-
-    if (this.label == 'rectangle' || this.label == 'polygon') {
-      let maxDistance = -Infinity;
-
-      for (let i = 0; i < this.vertices.length; i++) {
-        const vertex = this.vertices[i];
-        const distance = vertex.dot(direction);
-
-        if (distance > maxDistance) {
-          maxDistance = distance;
-          maxPoint.copy(vertex);
-        }
-      }
-    } else if (this.label == 'circle') {
-      maxPoint.copy(
-        Vec2.add(this.position, Vec2.scale(direction, this.radius))
-      );
-    } else if (this.label == 'capsule') {
-      maxPoint.copy(this.position).add(Vec2.scale(direction, this.radius * 2));
-
-      const ab = Vec2.subtract(this.endPoint, this.startPoint);
-      const ap = Vec2.subtract(maxPoint, this.startPoint);
-      const abLengthSq = ab.magnitudeSq();
-      const projection = ap.dot(ab) / abLengthSq;
-      const contactPoint = ab.scale(projection).add(this.startPoint);
-
-      if (projection < 0) {
-        contactPoint.copy(this.startPoint);
-      } else if (projection > 1) {
-        contactPoint.copy(this.endPoint);
-      }
-
-      maxPoint.copy(contactPoint).add(direction, this.radius);
-    }
-
-    return maxPoint;
   }
 
   render(ctx) {
@@ -508,11 +422,22 @@ export class Body {
     this.renderAnchorPoints(ctx);
   }
 
+  renderAnchorPoints(ctx) {
+    ctx.strokeStyle = 'white';
+    this.anchorPoints.forEach(point => {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 3, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+  }
+
   renderContacts(ctx) {
     ctx.fillStyle = 'cyan';
     ctx.strokeStyle = 'cyan';
 
-    this.contactPoints.forEach(point => {
+    for (let i = 0; i < this.contactPoints.length; ++i) {
+      const point = this.contactPoints[i];
+
       switch (this.label) {
         // Circle Edge
         case 'circle': {
@@ -582,15 +507,17 @@ export class Body {
       ctx.beginPath();
       ctx.arc(point.x, point.y, 2, 0, Math.PI * 2);
       ctx.fill();
-    });
+    }
 
     // Polygon Edge
-    this.edges.forEach(edge => {
+    for (let i = 0; i < this.edges.length; ++i) {
+      const edge = this.edges[i];
+
       ctx.beginPath();
       ctx.moveTo(edge[0].x, edge[0].y);
       ctx.lineTo(edge[1].x, edge[1].y);
       ctx.stroke();
-    });
+    }
   }
 
   renderVelocity(ctx) {

@@ -1,37 +1,6 @@
 import { Vec2 } from './Vec2.js';
 
 export class Collision {
-  static _clamp(value, min = 0, max = 1) {
-    return value > max ? max : value < min ? min : value;
-  }
-
-  static getCollisionType(labelA, labelB) {
-    if (labelA == 'circle' && labelB == 'circle') {
-      return 'circle-circle';
-    }
-
-    if (labelA == 'circle' && (labelB == 'rectangle' || labelB == 'polygon')) {
-      return 'circle-polygon';
-    }
-
-    if (
-      (labelA == 'rectangle' || labelA == 'polygon') &&
-      (labelB == 'rectangle' || labelB == 'polygon')
-    ) {
-      return 'polygon-polygon';
-    }
-
-    if ((labelA == 'rectangle' || labelA == 'polygon') && labelB == 'capsule') {
-      return 'polygon-capsule';
-    }
-
-    if (labelA == 'circle' && labelB == 'capsule') return 'circle-capsule';
-
-    if (labelA == 'capsule' && labelB == 'capsule') return 'capsule-capsule';
-
-    return 'unknown';
-  }
-
   static _getClosestPoint(targetPoint, vertices) {
     let minDistanceSq = Infinity;
     let minIndex = -1;
@@ -138,8 +107,7 @@ export class Collision {
     return edge;
   }
 
-  static _getAxes(vertices) {
-    const axes = [];
+  static _getAxes(vertices, axes = []) {
     const n = vertices.length;
 
     for (let i = 0; i < n; ++i) {
@@ -153,12 +121,74 @@ export class Collision {
     return axes;
   }
 
-  static detectCircleToCircle(bodyA, bodyB) {
+  static _getFeaturedVertices(vertices, normal) {
+    let maxProjection = -Infinity;
+    let index = -1;
+    const n = vertices.length;
+
+    for (let i = 0; i < n; ++i) {
+      const projection = vertices[i].dot(normal);
+
+      if (projection > maxProjection) {
+        maxProjection = projection;
+        index = i;
+      }
+    }
+
+    return [
+      vertices[(index - 1 + n) % n],
+      vertices[index],
+      vertices[(index + 1) % n]
+    ];
+  }
+
+  static _getBestEdge(featuredVertices, normal) {
+    const prevVertex = featuredVertices[0];
+    const currVertex = featuredVertices[1];
+    const nextVertex = featuredVertices[2];
+
+    const prevEdge = Vec2.subtract(currVertex, prevVertex);
+    const nextEdge = Vec2.subtract(currVertex, nextVertex);
+
+    prevEdge.normalize();
+    nextEdge.normalize();
+
+    if (prevEdge.dot(normal) <= nextEdge.dot(normal)) {
+      return [prevVertex, currVertex, currVertex];
+    } else {
+      return [currVertex, nextVertex, currVertex];
+    }
+  }
+
+  static _clipEdge(edge, normal, dot, clippedPoints = []) {
+    const d1 = edge[0].dot(normal) - dot;
+    const d2 = edge[1].dot(normal) - dot;
+
+    if (d1 >= 0) clippedPoints.push(edge[0]);
+    if (d2 >= 0) clippedPoints.push(edge[1]);
+
+    if (d1 * d2 < 0.0) {
+      const edgeVector = Vec2.subtract(edge[1], edge[0]);
+      const u = d1 / (d1 - d2);
+
+      edgeVector.scale(u);
+      edgeVector.add(edge[0]);
+
+      clippedPoints.push(edgeVector);
+    }
+
+    return clippedPoints;
+  }
+
+  static detectCircleToCircle(bodyA, bodyB, manifold) {
     const direction = Vec2.subtract(bodyB.position, bodyA.position);
     const distanceSq = direction.magnitudeSq();
     const radii = bodyA.radius + bodyB.radius;
 
-    if (distanceSq == 0 || distanceSq > radii ** 2) return { collision: null };
+    if (distanceSq === 0 || distanceSq > radii * radii) {
+      manifold.collision = false;
+      return;
+    }
 
     const distance = Math.sqrt(distanceSq);
     const normal = direction.scale(1 / distance);
@@ -167,31 +197,22 @@ export class Collision {
 
     bodyA.contactPoints.push(contactPoint);
 
-    return {
-      collision: true,
-      normal,
-      overlapDepth,
-      contactPoints: [contactPoint]
-    };
+    manifold.collision = true;
+    manifold.normal.copy(normal);
+    manifold.overlapDepth = overlapDepth;
+    manifold.contactPoints = [contactPoint];
   }
 
-  static detectCircleToRectangle(bodyA, bodyB) {
+  static detectCircleToRectangle(bodyA, bodyB, manifold) {
     const normal = new Vec2();
-    let overlapDepth = Infinity;
+    let depth = Infinity;
+    const closestPoint = this._getClosestPoint(bodyA.position, bodyB.vertices);
+    let axes = [Vec2.subtract(closestPoint, bodyA.position)];
 
-    const directionA = Vec2.subtract(bodyB.position, bodyA.position);
-    const directionB = Vec2.subtract(bodyA.position, bodyB.position);
-    const edgeB = this._getEdge(directionB, bodyB.vertices, bodyB.position);
-    const closestPoint = this._getClosestPoint(bodyA.position, edgeB);
+    axes = this._getAxes(bodyB.vertices, axes);
 
-    const axisA = Vec2.subtract(closestPoint, bodyA.position);
-    const axesB = this._getAxes(bodyB.vertices);
-
-    axesB.splice(0, 0, axisA);
-
-    for (const axis of axesB) {
-      axis.normalize();
-
+    for (let i = 0; i < axes.length; ++i) {
+      const axis = axes[i].normalize();
       const projA = this._projectPointsWithRadius(
         [bodyA.position],
         bodyA.radius,
@@ -199,146 +220,148 @@ export class Collision {
       );
       const projB = this._projectVertices(bodyB.vertices, axis);
 
-      if (projA.min > projB.max || projB.min > projA.max)
-        return { collision: null };
+      if (projA.min > projB.max || projB.min > projA.max) {
+        manifold.collision = false;
+        return;
+      }
 
-      const axisOverlapDepth = Math.min(
-        projA.max - projB.min,
-        projB.max - projA.min
-      );
+      const axisDepth = Math.min(projA.max - projB.min, projB.max - projA.min);
 
-      if (axisOverlapDepth < overlapDepth) {
-        overlapDepth = axisOverlapDepth;
+      if (axisDepth < depth) {
+        depth = axisDepth;
         normal.copy(axis);
       }
     }
 
-    if (directionA.dot(normal) < 0) normal.negate();
+    const direction = Vec2.subtract(bodyB.position, bodyA.position);
 
+    if (direction.dot(normal) < 0) {
+      normal.negate();
+    }
+
+    const featuredVerticesB = this._getFeaturedVertices(
+      bodyB.vertices,
+      Vec2.negate(normal)
+    );
+    const edgeB = this._getBestEdge(featuredVerticesB, Vec2.negate(normal));
     const { contactPoint } = this._getPointInLineSegment(
-      edgeB[0],
       edgeB[1],
+      edgeB[0],
       bodyA.position
     );
 
     bodyA.contactPoints.push(contactPoint);
     bodyA.edges.push(edgeB);
 
-    return {
-      collision: true,
-      normal,
-      overlapDepth,
-      contactPoints: [contactPoint]
-    };
+    manifold.collision = true;
+    manifold.normal.copy(normal);
+    manifold.overlapDepth = depth;
+    manifold.contactPoints = [contactPoint];
   }
 
-  static detectPolygonToPolygon(bodyA, bodyB) {
+  static detectPolygonToPolygon(bodyA, bodyB, manifold) {
     const normal = new Vec2();
-    let overlap = Infinity;
+    let depth = Infinity;
+    let axes = [];
 
-    const directionA = Vec2.subtract(bodyB.position, bodyA.position);
-    const directionB = Vec2.subtract(bodyA.position, bodyB.position);
-    let edgeA = this._getEdge(directionA, bodyA.vertices, bodyA.position);
-    let edgeB = this._getEdge(directionB, bodyB.vertices, bodyB.position);
+    axes = this._getAxes(bodyA.vertices, axes);
+    axes = this._getAxes(bodyB.vertices, axes);
 
-    const contactPointInA = this._getContactPoint(bodyB.position, edgeA);
-    const contactPointInB = this._getContactPoint(bodyA.position, edgeB);
+    for (let i = 0; i < axes.length; ++i) {
+      const axis = axes[i].normalize();
+      const projA = this._projectVertices(bodyA.vertices, axis);
+      const projB = this._projectVertices(bodyB.vertices, axis);
 
-    directionA.copy(Vec2.subtract(contactPointInB, bodyA.position));
-    directionB.copy(Vec2.subtract(contactPointInA, bodyB.position));
-    edgeA = this._getEdge(directionA, bodyA.vertices, bodyA.position);
-    edgeB = this._getEdge(directionB, bodyB.vertices, bodyB.position);
-
-    const axesA = this._getAxes(bodyA.vertices);
-    const axesB = this._getAxes(bodyB.vertices);
-
-    const _getMTV = axes => {
-      for (const axis of axes) {
-        axis.normalize();
-
-        const projA = this._projectVertices(bodyA.vertices, axis);
-        const projB = this._projectVertices(bodyB.vertices, axis);
-
-        if (projA.min > projB.max || projB.min > projA.max) {
-          return null;
-        }
-
-        const axisOverlap = Math.min(
-          projA.max - projB.min,
-          projB.max - projA.min
-        );
-
-        if (axisOverlap < overlap) {
-          overlap = axisOverlap;
-          normal.copy(axis);
-        }
+      if (projA.min > projB.max || projB.min > projA.max) {
+        manifold.collision = false;
+        return;
       }
 
-      return true;
-    };
+      const axisDepth = Math.min(projA.max - projB.min, projB.max - projA.min);
 
-    if (!_getMTV(axesA) || !_getMTV(axesB)) {
-      return { collision: null };
+      if (axisDepth < depth) {
+        depth = axisDepth;
+        normal.copy(axis);
+      }
     }
 
-    if (directionA.dot(normal) < 0) normal.negate();
+    const direction = Vec2.subtract(bodyB.position, bodyA.position);
+    let flip = false;
 
-    const contactPoints = [];
-    let minDistanceSq = Infinity;
+    if (direction.dot(normal) < 0) {
+      normal.negate();
+      flip = true;
+    }
 
-    const _findContactPoints = (edgeA, edgeB) => {
-      for (let i = 0; i < edgeA.length; ++i) {
-        const vertexA = edgeA[i];
-        const vertexB0 = edgeB[0];
-        const vertexB1 = edgeB[1];
-        const { contactPoint, distanceSq } = this._getPointInLineSegment(
-          vertexB0,
-          vertexB1,
-          vertexA
-        );
+    const featuredVerticesA = this._getFeaturedVertices(bodyA.vertices, normal);
+    const featuredVerticesB = this._getFeaturedVertices(
+      bodyB.vertices,
+      Vec2.negate(normal)
+    );
 
-        if (Math.abs(distanceSq - minDistanceSq) < 1e-2) {
-          if (!contactPoint.equal(contactPoints[0])) {
-            minDistanceSq = distanceSq;
-            contactPoints[1] = contactPoint;
-          }
-        } else if (distanceSq < minDistanceSq) {
-          minDistanceSq = distanceSq;
-          contactPoints[0] = contactPoint;
-        }
+    const bestEdgeA = this._getBestEdge(featuredVerticesA, normal);
+    const bestEdgeB = this._getBestEdge(featuredVerticesB, Vec2.negate(normal));
+
+    bodyA.edges.push(bestEdgeA);
+
+    let ref = null;
+    let inc = null;
+
+    if (flip) {
+      ref = bestEdgeB;
+      inc = bestEdgeA;
+    } else {
+      ref = bestEdgeA;
+      inc = bestEdgeB;
+    }
+
+    const refEdge = Vec2.subtract(ref[1], ref[0]).normalize();
+    const dot1 = ref[0].dot(refEdge);
+    const dot2 = ref[1].dot(refEdge);
+    let clippedPoints = [];
+
+    clippedPoints = this._clipEdge(inc, refEdge, dot1);
+
+    if (clippedPoints.length > 1) {
+      clippedPoints = this._clipEdge(
+        clippedPoints,
+        Vec2.negate(refEdge),
+        -dot2
+      );
+    }
+
+    const edgeNormal = refEdge.perp();
+    const max = ref[2].dot(edgeNormal);
+
+    clippedPoints.forEach((point, i) => {
+      if (point.dot(edgeNormal) - max < 0) {
+        clippedPoints.splice(i, 1);
       }
-    };
+    });
 
-    _findContactPoints(edgeA, edgeB);
-    _findContactPoints(edgeB, edgeA);
-
-    contactPoints.forEach(point => {
+    clippedPoints.forEach(point => {
       bodyA.contactPoints.push(point);
     });
 
-    bodyA.edges.push(edgeA);
-
-    return {
-      collision: true,
-      normal,
-      overlapDepth: overlap,
-      contactPoints
-    };
+    manifold.collision = true;
+    manifold.normal.copy(normal);
+    manifold.overlapDepth = depth;
+    manifold.contactPoints = clippedPoints;
   }
 
-  static detectPolygonToCapsule(bodyA, bodyB) {
+  static detectPolygonToCapsule(bodyA, bodyB, manifold) {
     const normal = new Vec2();
     let overlapDepth = Infinity;
 
     const directionA = Vec2.subtract(bodyB.position, bodyA.position);
     let edgeA = this._getEdge(directionA, bodyA.vertices, bodyA.position);
     let edgeB = [bodyB.startPoint, bodyB.endPoint];
+
+    const closestPointOfA = this._getClosestPoint(bodyB.position, edgeA);
     const contactPointInB = this._getContactPoint(bodyA.position, edgeB);
 
     directionA.copy(Vec2.subtract(contactPointInB, bodyA.position));
     edgeA = this._getEdge(directionA, bodyA.vertices, bodyA.position);
-
-    const closestPointOfA = this._getClosestPoint(bodyB.position, edgeA);
 
     const axesA = this._getAxes(bodyA.vertices);
     axesA.splice(
@@ -358,8 +381,10 @@ export class Collision {
         axis
       );
 
-      if (projA.min > projB.max || projB.min > projA.max)
-        return { collision: null };
+      if (projA.min > projB.max || projB.min > projA.max) {
+        manifold.collision = false;
+        return;
+      }
 
       const axisOverlapDepth = Math.min(
         projA.max - projB.min,
@@ -402,9 +427,11 @@ export class Collision {
 
     _findContactPoints(edgeA, edgeB);
 
-    if (contactPoints.length > 0) {
+    if (contactPoints.length < 2) {
       contactPoints[0].add(Vec2.scale(normal, -bodyB.radius));
-    } else if (contactPoints.length > 1) {
+    }
+
+    if (contactPoints.length > 1) {
       contactPoints[0].add(Vec2.scale(normal, -bodyB.radius));
       contactPoints[1].add(Vec2.scale(normal, -bodyB.radius));
     }
@@ -414,33 +441,24 @@ export class Collision {
     contactPoints.forEach(point => {
       bodyA.contactPoints.push(point);
     });
-
     bodyA.edges.push(edgeA);
 
-    return {
-      collision: true,
-      normal,
-      overlapDepth,
-      contactPoints
-    };
+    manifold.collision = true;
+    manifold.normal.copy(normal);
+    manifold.overlapDepth = overlapDepth;
+    manifold.contactPoints = contactPoints;
   }
 
-  static detectCapsuleToCapsule(bodyA, bodyB) {
+  static detectCapsuleToCapsule(bodyA, bodyB, manifold) {
     const normal = new Vec2();
     let overlapDepth = Infinity;
+
     const edgeA = [bodyA.startPoint, bodyA.endPoint];
     const edgeB = [bodyB.startPoint, bodyB.endPoint];
-    const { contactPoint: contactPointInA } = this._getPointInLineSegment(
-      edgeA[0],
-      edgeA[1],
-      bodyB.position
-    );
-    const { contactPoint: contactPointInB } = this._getPointInLineSegment(
-      edgeB[0],
-      edgeB[1],
-      bodyA.position
-    );
-    const direction = Vec2.subtract(contactPointInB, contactPointInA);
+    const closestPointA = this._getClosestPoint(bodyB.position, edgeA);
+    const closestPointB = this._getClosestPoint(bodyA.position, edgeB);
+    const direction = Vec2.subtract(closestPointB, closestPointA);
+
     const axes = [
       direction,
       Vec2.subtract(edgeA[1], edgeA[0]).perp(),
@@ -454,7 +472,8 @@ export class Collision {
       const projB = this._projectPointsWithRadius(edgeB, bodyB.radius, axis);
 
       if (projA.min > projB.max || projB.min > projA.max) {
-        return { collision: null };
+        manifold.collision = false;
+        return;
       }
 
       const axisOverlapDepth = Math.min(
@@ -503,15 +522,13 @@ export class Collision {
       bodyA.contactPoints.push(point);
     });
 
-    return {
-      collision: true,
-      normal,
-      overlapDepth,
-      contactPoints
-    };
+    manifold.collision = true;
+    manifold.normal.copy(normal);
+    manifold.overlapDepth = overlapDepth;
+    manifold.contactPoints = contactPoints;
   }
 
-  static detectCircleToCapsule(bodyA, bodyB) {
+  static detectCircleToCapsule(bodyA, bodyB, manifold) {
     const edgeB = [bodyB.startPoint, bodyB.endPoint];
     const { contactPoint: contactPointInB } = this._getPointInLineSegment(
       edgeB[0],
@@ -524,7 +541,8 @@ export class Collision {
     const radii = bodyA.radius + bodyB.radius;
 
     if (distanceSq == 0 || distanceSq > radii * radii) {
-      return { collision: null };
+      manifold.collision = false;
+      return;
     }
 
     const distance = Math.sqrt(distanceSq);
@@ -534,11 +552,9 @@ export class Collision {
 
     bodyA.contactPoints.push(contactPoint);
 
-    return {
-      collision: true,
-      normal,
-      overlapDepth,
-      contactPoints: [contactPoint]
-    };
+    manifold.collision = true;
+    manifold.normal.copy(normal);
+    manifold.overlapDepth = overlapDepth;
+    manifold.contactPoints = [contactPoint];
   }
 }

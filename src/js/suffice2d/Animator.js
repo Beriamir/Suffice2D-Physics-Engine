@@ -5,6 +5,7 @@ export class Animator {
     this.accumulator = 0;
     this.simulationState = true;
     this.simulationId = null;
+    this.minDeltaTime = 1000 / 12;
   }
 
   pause() {
@@ -22,14 +23,15 @@ export class Animator {
   start(callback) {
     this.callback = callback;
     const now = performance.now();
-    const delta = now - this.lastTime;
-    const clampedDelta = delta > 41.66 ? 41.66 : delta;
+    const deltaTime = now - this.lastTime;
+    const clampedDelta =
+      deltaTime > this.minDeltaTime ? this.minDeltaTime : deltaTime;
 
     this.lastTime = now;
     this.accumulator += clampedDelta;
 
     if (this.accumulator >= this.interval) {
-      this.callback(clampedDelta);
+      callback(clampedDelta);
       this.accumulator %= this.interval;
     }
 

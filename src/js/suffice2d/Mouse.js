@@ -20,15 +20,12 @@ export class Mouse {
     }
   }
 
-  constrainBody(force = 1) {
-    if (force > 1) force = 1;
-    else if (force < 0) force = 0; 
-    
+  constrainBody(deltaTime = 1000 / 60) {
     if (this.selectedBody) {
-      this.selectedBody.addAnchorForce(
+      this.selectedBody.addAnchorVelocity(
         this.selectedAnchor,
         this.position,
-        force
+        deltaTime
       );
     }
   }
@@ -36,9 +33,10 @@ export class Mouse {
   dropBody() {
     if (this.selectedBody) {
       this.selectedBody.removeAnchorPoint(this.selectedAnchor);
-      this.selectedBody = null;
-      this.selectedAnchor = null;
     }
+
+    this.selectedBody = null;
+    this.selectedAnchor = null;
   }
 
   renderGrab(ctx) {

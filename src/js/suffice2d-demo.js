@@ -8,10 +8,11 @@ const mouse = new suffice2d.Vec2(canvasWidth / 2, canvasHeight / 2);
 let wireframe = false;
 let showGrid = false;
 let renderDebug = false;
-let restitution = 0.5;
+let restitution = 0.4;
 let subSteps = 4;
 let gravity = 9.81;
-const bodySize = 50;
+const bodySize = 40;
+const timeScalar = 1;
 
 const engine = new suffice2d.Engine({
   targetFPS,
@@ -19,11 +20,10 @@ const engine = new suffice2d.Engine({
   gravity,
   removeOffBound: true,
   bound: {
-    x: -bodySize,
-    y: -bodySize,
-    width: canvasWidth + bodySize,
-    height: canvasHeight + bodySize,
-    scale: bodySize
+    x: 0,
+    y: 0,
+    width: canvasWidth,
+    height: canvasHeight
   }
 });
 const world = engine.world;
@@ -32,6 +32,10 @@ const animator = engine.animator;
 const shapeTypes = ['circle', 'capsule', 'rectangle', 'polygon'];
 let shapeTypeIndex = 0;
 let shapeType = shapeTypes[shapeTypeIndex];
+
+let collisionStart = 0;
+let collisionEnd = 0;
+let collisionActive = 0;
 
 function clamp(value, min = 0, max = 1) {
   return value > max ? max : value < min ? min : value;
@@ -81,8 +85,11 @@ document.addEventListener('DOMContentLoaded', function () {
     wireframe = false;
     showGrid = false;
     renderDebug = false;
+    collisionStart = 0;
+    collisionEnd = 0;
+    collisionActive = 0;
 
-    ground = new suffice2d.Bodies.rectangle(
+    ground = new suffice2d.RigidBodies.rectangle(
       canvasWidth * 0.45,
       canvasHeight * 0.9,
       50,
@@ -90,10 +97,11 @@ document.addEventListener('DOMContentLoaded', function () {
       {
         wireframe,
         isStatic: true,
-        fixedRotation: true
+        fixedRot: true,
+        rotation: Math.PI * 0.5
       }
     );
-    const obstacle1 = new suffice2d.Bodies.capsule(
+    const obstacle1 = new suffice2d.RigidBodies.capsule(
       canvasWidth * 0.2,
       canvasHeight * 0.5,
       20,
@@ -101,10 +109,11 @@ document.addEventListener('DOMContentLoaded', function () {
       {
         wireframe,
         isStatic: true,
-        fixedRotation: false
+        fixedRot: false,
+        rotation: Math.PI * 0.5
       }
     );
-    obstacle2 = new suffice2d.Bodies.rectangle(
+    obstacle2 = new suffice2d.RigidBodies.rectangle(
       canvasWidth * 0.9,
       canvasHeight * 0.5,
       canvasWidth * 0.5,
@@ -112,19 +121,25 @@ document.addEventListener('DOMContentLoaded', function () {
       {
         wireframe,
         isStatic: true,
-        fixedRotation: true
+        fixedRot: true,
+        rotation: Math.PI / 1.2
       }
     );
-
-    ground.rotate(Math.PI * 0.5);
-    obstacle1.rotate(Math.PI * 0.5);
-    obstacle2.rotate(Math.PI / 1.2);
-    // obstacle2.roundCorner(25);
 
     world.addBodies([ground, obstacle1, obstacle2]);
   }
 
   init();
+
+  engine.event.on('collisionStart', () => {
+    collisionStart++;
+  });
+  engine.event.on('collisionEnd', () => {
+    collisionEnd++;
+  });
+  engine.event.on('collisionActive', () => {
+    collisionActive++;
+  });
 
   /**
    * Render
@@ -135,7 +150,7 @@ document.addEventListener('DOMContentLoaded', function () {
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
     if (showGrid) engine.renderGrid(ctx);
 
-    world.collections.forEach(body => {
+    world.forEach(body => {
       body.render(ctx);
       if (renderDebug) body.renderDebug(ctx);
     });
@@ -154,7 +169,7 @@ document.addEventListener('DOMContentLoaded', function () {
     ctx.fillText(
       `
         ${Math.round(1000 / deltaTime)} FPS 
-        ${world.collections.length} Rigid Bodies 
+        ${world.count} RigidBodies 
         ${subSteps} Sub Steps
       `,
       canvasWidth * 0.5,
@@ -167,17 +182,33 @@ document.addEventListener('DOMContentLoaded', function () {
       canvasWidth * 0.5,
       fontSize * 3.5
     );
+    ctx.fillText(
+      `
+        > Start: ${collisionStart} 
+        > End: ${collisionEnd} 
+        > Active: ${collisionActive} 
+      `,
+      canvasWidth * 0.5,
+      fontSize * 5
+    );
   }
 
   /**
    * Update
    */
   function update(deltaTime) {
+    deltaTime *= timeScalar;
     renderSimulation(ctx, deltaTime);
     engine.run(deltaTime);
   }
 
-  animator.start(update);
+  engine.start(update);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      engine.pause();
+    } else engine.play();
+  });
 
   /**
    *
@@ -263,7 +294,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     switch (shapeType) {
       case 'circle': {
-        const body = new suffice2d.Bodies.circle(
+        const body = new suffice2d.RigidBodies.circle(
           position.x,
           position.y,
           bodySize * 0.5,
@@ -274,7 +305,7 @@ document.addEventListener('DOMContentLoaded', function () {
         break;
       }
       case 'capsule': {
-        const body = new suffice2d.Bodies.capsule(
+        const body = new suffice2d.RigidBodies.capsule(
           position.x,
           position.y,
           bodySize * 0.35,
@@ -287,7 +318,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       case 'polygon': {
         const vertices = [];
-        const edgeCount = 3; // Math.floor(Math.random() * (12 - 3) + 3);
+        const edgeCount = Math.floor(Math.random() * (12 - 3) + 3);
 
         for (let i = 0; i < edgeCount; ++i) {
           const angle = (i * Math.PI * 2) / edgeCount;
@@ -301,13 +332,13 @@ document.addEventListener('DOMContentLoaded', function () {
           );
         }
 
-        const body = new suffice2d.Bodies.polygon(vertices, option);
+        const body = new suffice2d.RigidBodies.polygon(vertices, option);
 
         world.addBody(body);
         break;
       }
       case 'rectangle': {
-        const body = new suffice2d.Bodies.rectangle(
+        const body = new suffice2d.RigidBodies.rectangle(
           position.x,
           position.y,
           bodySize * 0.9,
@@ -339,7 +370,7 @@ document.addEventListener('DOMContentLoaded', function () {
     showGrid = !showGrid;
     renderDebug = !renderDebug;
 
-    engine.world.collections.forEach(body => {
+    engine.world.forEach(body => {
       wireframe = renderDebug ? true : false;
       body.wireframe = wireframe;
     });

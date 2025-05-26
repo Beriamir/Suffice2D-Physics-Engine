@@ -1,6 +1,7 @@
 import { Vec2 } from './Vec2.js';
+import { Utils } from './Utils.js';
 
-export class SpatialGrid {
+export class UniformGrid {
   constructor(x, y, width, height, scale) {
     this.bound = [x, y, width, height];
     this.min = new Vec2(x, y);
@@ -16,18 +17,14 @@ export class SpatialGrid {
     return y * this.columns + x;
   }
 
-  _clamp(value, min = 0, max = 1) {
-    return value < min ? min : value > max ? max : value;
-  }
-
   _range(x, y, width, height) {
     const min = [
-      this._clamp(Math.floor((x - width) / this.scale), 0, this.columns - 1),
-      this._clamp(Math.floor((y - height) / this.scale), 0, this.rows - 1)
+      Utils.clamp(Math.floor((x - width) / this.scale), 0, this.columns - 1),
+      Utils.clamp(Math.floor((y - height) / this.scale), 0, this.rows - 1)
     ];
     const max = [
-      this._clamp(Math.floor((x + width) / this.scale), 0, this.columns - 1),
-      this._clamp(Math.floor((y + height) / this.scale), 0, this.rows - 1)
+      Utils.clamp(Math.floor((x + width) / this.scale), 0, this.columns - 1),
+      Utils.clamp(Math.floor((y + height) / this.scale), 0, this.rows - 1)
     ];
 
     return [min, max];
@@ -153,7 +150,7 @@ export class SpatialGrid {
     }
     ctx.stroke();
 
-    ctx.fillStyle = '#5252522e';
+    ctx.fillStyle = '#2f1e3580';
     for (let i = 0; i < this.grid.length; ++i) {
       if (this.grid[i].length > 0) {
         const x = i % this.columns;
