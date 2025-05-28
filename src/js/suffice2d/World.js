@@ -15,9 +15,7 @@ export class World {
 
   forEach(callback) {
     for (let i = 0; i < this.count; ++i) {
-      const body = this.collections[i];
-
-      callback(body);
+      if (callback(this.collections[i], i)) break;
     }
   }
 
@@ -33,7 +31,7 @@ export class World {
     }
 
     this.collections.push(body);
-    this.engine.grid.addData(body);
+    this.engine.grid.add(body);
   }
 
   removeBody(body) {
@@ -44,7 +42,7 @@ export class World {
     this.collections[index] = this.collections[lastIndex];
     this.collections[lastIndex] = temp;
     this.collections.pop();
-    this.engine.grid.removeData(body);
+    this.engine.grid.remove(body);
   }
 
   addBodies(bodies) {
@@ -58,7 +56,7 @@ export class World {
       }
 
       this.collections.push(body);
-      this.engine.grid.addData(body);
+      this.engine.grid.add(body);
     }
   }
 
@@ -71,13 +69,13 @@ export class World {
       this.collections[index] = this.collections[lastIndex];
       this.collections[lastIndex] = temp;
       this.collections.pop();
-      this.engine.grid.removeData(body);
+      this.engine.grid.remove(body);
     });
   }
 
   empty() {
     this.forEach(body => {
-      this.engine.grid.removeData(body);
+      this.engine.grid.remove(body);
     });
 
     this.count = 0;

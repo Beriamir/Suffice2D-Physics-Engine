@@ -5,7 +5,7 @@ import { Collision } from './Collision.js';
 
 export class RigidBody {
   constructor(properties, option = {}) {
-    this.type = 'rigidBody';
+    this.type = 'rigid';
     this.name = '';
     this.tag = '';
 
@@ -56,7 +56,6 @@ export class RigidBody {
 
     this.linearVelocity = option.linearVelocity ?? new Vec2();
     this.angularVelocity = option.angularVelocity ?? 0;
-
     this.staticFriction = option.staticFriction ?? 0.6;
     this.kineticFriction = option.kineticFriction ?? 0.4;
     this.restitution = option.restitution ?? 0.0;
@@ -117,26 +116,27 @@ export class RigidBody {
     this.inverseMass = 1 / this.mass;
     this.inverseInertia = 1 / this.inertia;
 
+    this.isSleeping = false;
     this.isSensor = option.isSensor ?? false;
     this.isStatic = option.isStatic ?? false;
     this.fixedRot = option.fixedRot ?? false;
+    this.rotation = option.rotation ?? 0;
     this.wireframe = option.wireframe ?? false;
     this.jointSelfCollision = true;
     this.jointId = Math.random() * 10276262;
-    this.color = option.color ?? `hsla(${Math.random() * 360}, 100%, 50%, 0.5)`;
+    this.customColor = option.color;
+    this.color = `hsla(${Math.random() * 360}, 100%, 50%, `;
+    this.bound = new Bnd2(this);
 
     if (this.isStatic) {
       this.inverseMass = 0;
       this.restitution = 1;
-      this.color = option.color ?? 'hsla(0, 0%, 51.4%, 0.5)';
+      this.color = 'hsla(0, 0%, 50%, ';
     }
 
     if (this.fixedRot) {
       this.inverseInertia = 0;
     }
-
-    this.rotation = option.rotation ?? 0;
-    this.bound = new Bnd2(this);
 
     this.contactPoints = [];
     this.edges = [];
@@ -144,10 +144,9 @@ export class RigidBody {
     this.anchorPointId = -1;
     this.anchorPairs = [];
 
-    this.onCollisionStart = null;
-    this.onCollisionActive = null;
-    this.onCollisionEnd = null;
-
+    this.onCollisionStart = _ => {};
+    this.onCollisionActive = _ => {};
+    this.onCollisionEnd = _ => {};
     this.rotate(this.rotation);
   }
 
@@ -212,7 +211,7 @@ export class RigidBody {
         const ap = Vec2.subtract(anchor, this.startPoint);
         const abLengthSq = ab.magnitudeSq();
         const projection = ap.dot(ab) / abLengthSq;
-        const contactPoint = ab.scale(projection).add(this.startPoint);
+        const contactPoint = Vec2.add(this.startPoint, ab, projection);
 
         if (projection < 0) {
           contactPoint.copy(this.startPoint);
@@ -410,12 +409,13 @@ export class RigidBody {
     }
 
     if (!this.wireframe) {
-      ctx.fillStyle = this.color;
+      ctx.fillStyle = this.customColor || this.color + ` 0.5)`;
+      ctx.strokeStyle = this.customColor ? '#ffffff' : this.color + `1)`;
+
       ctx.fill();
-      ctx.strokeStyle = '#ffffffc0';
       ctx.stroke();
     } else {
-      ctx.strokeStyle = this.isSleeping ? '#ffffff56' : '#ffffff9c';
+      ctx.strokeStyle = this.isSleeping ? '#ffffff80' : '#ffffff';
       ctx.stroke();
     }
 
@@ -423,100 +423,23 @@ export class RigidBody {
   }
 
   renderAnchorPoints(ctx) {
-    ctx.strokeStyle = 'white';
-    this.anchorPoints.forEach(point => {
+    ctx.strokeStyle = this.customColor ? '#ffffff' : this.color + `1)`;
+    for (let i = 0; i < this.anchorPoints.length; ++i) {
+      const point = this.anchorPoints[i];
+
       ctx.beginPath();
       ctx.arc(point.x, point.y, 3, 0, Math.PI * 2);
       ctx.stroke();
-    });
+    }
   }
 
   renderContacts(ctx) {
-    ctx.fillStyle = 'cyan';
-    ctx.strokeStyle = 'cyan';
-
     for (let i = 0; i < this.contactPoints.length; ++i) {
       const point = this.contactPoints[i];
 
-      switch (this.label) {
-        // Circle Edge
-        case 'circle': {
-          const direction = Vec2.subtract(point, this.position);
-          const angle = Math.atan2(direction.y, direction.x);
-
-          ctx.beginPath();
-          ctx.arc(
-            this.position.x,
-            this.position.y,
-            this.radius,
-            angle - Math.PI * 0.25,
-            angle + Math.PI * 0.25
-          );
-          ctx.stroke();
-          break;
-        }
-
-        // capsule Edge
-        case 'capsule': {
-          let edge = null;
-          const ab = Vec2.subtract(this.endPoint, this.startPoint);
-          const ap = Vec2.subtract(point, this.startPoint);
-          const cross = ap.cross(ab);
-
-          const magnitudeSq = ab.magnitudeSq();
-          const projection = ap.dot(ab) / magnitudeSq;
-
-          if (projection > 0 && projection < 1) {
-            if (cross > 0) edge = [this.vertices[1], this.vertices[2]];
-            else if (cross < 0) edge = [this.vertices[0], this.vertices[3]];
-
-            ctx.beginPath();
-            ctx.moveTo(edge[0].x, edge[0].y);
-            ctx.lineTo(edge[1].x, edge[1].y);
-            ctx.stroke();
-          } else {
-            const direction = Vec2.subtract(point, this.position);
-            const angle = Math.atan2(direction.y, direction.x);
-
-            ctx.beginPath();
-            if (projection < 0) {
-              ctx.arc(
-                this.startPoint.x,
-                this.startPoint.y,
-                this.radius,
-                angle - Math.PI * 0.25,
-                angle + Math.PI * 0.25
-              );
-            } else if (projection > 1) {
-              ctx.arc(
-                this.endPoint.x,
-                this.endPoint.y,
-                this.radius,
-                angle - Math.PI * 0.25,
-                angle + Math.PI * 0.25
-              );
-            }
-            ctx.stroke();
-          }
-
-          break;
-        }
-      }
-
-      // Contact Point
       ctx.beginPath();
-      ctx.arc(point.x, point.y, 2, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, 1, 0, Math.PI * 2);
       ctx.fill();
-    }
-
-    // Polygon Edge
-    for (let i = 0; i < this.edges.length; ++i) {
-      const edge = this.edges[i];
-
-      ctx.beginPath();
-      ctx.moveTo(edge[0].x, edge[0].y);
-      ctx.lineTo(edge[1].x, edge[1].y);
-      ctx.stroke();
     }
   }
 
@@ -529,12 +452,13 @@ export class RigidBody {
       this.position.x + this.linearVelocity.x * maxLength,
       this.position.y + this.linearVelocity.y * maxLength
     );
-    ctx.strokeStyle = 'cyan';
     ctx.stroke();
   }
 
   renderDebug(ctx) {
     this.bound.render(ctx);
+    ctx.fillStyle = '#ffffff80';
+    ctx.strokeStyle = '#ffffff80';
     this.renderContacts(ctx);
     this.renderVelocity(ctx);
   }

@@ -1,5 +1,4 @@
 import { Vec2 } from './Vec2.js';
-import { Utils } from './Utils.js';
 
 export class Solver {
   static solveCollision(bodyA, bodyB, manifold) {
@@ -43,9 +42,6 @@ export class Solver {
     for (let i = 0; i < contactNum; ++i) {
       rA[i] = Vec2.subtract(contactPoints[i], bodyA.position);
       rB[i] = Vec2.subtract(contactPoints[i], bodyB.position);
-      tangent[i] = new Vec2();
-      impulse[i] = 0;
-      friction[i] = 0;
 
       const rAPerp = rA[i].perp();
       const rBPerp = rB[i].perp();
@@ -55,6 +51,10 @@ export class Solver {
       const velNormal = relVel.dot(normal);
 
       if (velNormal > 0) {
+        tangent[i] = new Vec2();
+        impulse[i] = 0;
+        friction[i] = 0;
+
         continue;
       }
 
@@ -82,7 +82,9 @@ export class Solver {
       impulse[i] = (-(1 + restitution) * velNormal + bias) / effMassN;
       friction[i] = -relVel.dot(tangent[i]) / effMassT;
 
-      // Clamp Friction
+      // Clamp Impulses
+      if (impulse[i] < 0) impulse[i] = 0;
+
       if (Math.abs(friction[i]) >= impulse[i] * staticFriction) {
         friction[i] = -impulse[i] * kineticFriction;
       }

@@ -90,7 +90,7 @@ export class Bnd2 {
   }
 
   render(ctx) {
-    ctx.strokeStyle = '#00ffff48';
+    ctx.strokeStyle = '#ffffff80';
     ctx.strokeRect(this.min.x, this.min.y, this.width, this.height);
   }
 }

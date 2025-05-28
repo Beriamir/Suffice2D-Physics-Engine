@@ -101,7 +101,6 @@ export class Constraint {
       if (distance === 0) continue;
 
       const stiffness = option.stiffness || 0.5;
-      const springiness = option.springiness || 0.5;
       const restLength = option.restLength || 0;
       const normal = delta.scale(1 / distance);
       const correction = distance - restLength;
@@ -163,7 +162,7 @@ export class Constraint {
       const beta = 0.2 / deltaTime;
       const slop = correction * 0.8;
       const bias = Math.max(correction - slop, 0) * beta;
-      const impulse = -((1 - springiness) * velNormal + bias) / effMassN;
+      const impulse = -((1 - stiffness) * velNormal + bias) / effMassN;
       let friction = relVel.dot(tangent) / effMassT;
 
       // Clamp Friction
@@ -204,7 +203,6 @@ export class Constraint {
       if (distance === 0) continue;
 
       const stiffness = option.stiffness ?? 0.5;
-      const springiness = option.springiness ?? 0.5;
       const restLength = option.restLength ?? 0;
       const minAngle = option.minAngle ?? -Infinity;
       const maxAngle = option.maxAngle ?? Infinity;
@@ -263,7 +261,7 @@ export class Constraint {
       const beta = 0.2 / deltaTime;
       const slop = correction * 0.8;
       const bias = Math.max(correction - slop, 0) * beta;
-      const impulse = -((1 - springiness) * velNormal + bias) / effMassN;
+      const impulse = -((1 - stiffness) * velNormal + bias) / effMassN;
       let friction = relVel.dot(tangent) / effMassT;
 
       // Clamp Friction
@@ -316,7 +314,6 @@ export class Constraint {
       if (distance === 0) continue;
 
       const stiffness = option.stiffness ?? 0.5;
-      const springiness = option.springiness ?? 0.5;
       const restLength = option.restLength ?? 0;
       const normal = delta.scale(1 / distance);
       const correction = distance - restLength;
@@ -378,7 +375,7 @@ export class Constraint {
       const beta = 0.2 / deltaTime;
       const slop = correction * 0.8;
       const bias = Math.max(correction - slop, 0) * beta;
-      let impulse = -((1 - springiness) * velNormal + bias) / effNormalMass;
+      let impulse = -((1 - stiffness) * velNormal + bias) / effNormalMass;
       let friction = relVel.dot(tangent) / effTangentMass;
 
       // Clamp Friction

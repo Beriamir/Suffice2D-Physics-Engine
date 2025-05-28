@@ -30,7 +30,7 @@ export class UniformGrid {
     return [min, max];
   }
 
-  addData(client) {
+  add(client) {
     const { width, height } = client.bound;
     const [min, max] = this._range(
       client.position.x,
@@ -51,7 +51,7 @@ export class UniformGrid {
     }
   }
 
-  removeData(client) {
+  remove(client) {
     const [min, max] = client.indices;
 
     for (let x = min[0]; x <= max[0]; ++x) {
@@ -73,7 +73,7 @@ export class UniformGrid {
     }
   }
 
-  updateData(client) {
+  update(client) {
     const [prevMin, prevMax] = client.indices;
     const { width, height } = client.bound;
     const [newMin, newMax] = this._range(
@@ -91,8 +91,8 @@ export class UniformGrid {
     )
       return null;
 
-    this.removeData(client);
-    this.addData(client);
+    this.remove(client);
+    this.add(client);
   }
 
   queryNearby(client) {
@@ -135,8 +135,18 @@ export class UniformGrid {
 
     ctx.fillStyle = '#000000';
     ctx.fillRect(x0, y0, width, height);
+    
+    ctx.fillStyle = '#ffffff1a';
+    for (let i = 0; i < this.grid.length; ++i) {
+      if (this.grid[i].length > 0) {
+        const x = i % this.columns;
+        const y = Math.floor(i / this.columns);
 
-    ctx.strokeStyle = '#ffffff47';
+        ctx.fillRect(x * this.scale, y * this.scale, this.scale, this.scale);
+      }
+    }
+
+    ctx.strokeStyle = '#ffffff1a';
     ctx.beginPath();
     for (let x = 0; x <= this.columns; ++x) {
       const gx = x0 + x * this.scale;
@@ -149,15 +159,5 @@ export class UniformGrid {
       ctx.lineTo(x0 + width, gy);
     }
     ctx.stroke();
-
-    ctx.fillStyle = '#2f1e3580';
-    for (let i = 0; i < this.grid.length; ++i) {
-      if (this.grid[i].length > 0) {
-        const x = i % this.columns;
-        const y = Math.floor(i / this.columns);
-
-        ctx.fillRect(x * this.scale, y * this.scale, this.scale, this.scale);
-      }
-    }
   }
 }

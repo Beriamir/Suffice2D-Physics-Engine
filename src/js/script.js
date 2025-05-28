@@ -3,14 +3,8 @@ import * as suffice2d from './suffice2d/index.js';
 onload = function main() {
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
-
   let canvasWidth = (canvas.width = innerWidth);
   let canvasHeight = (canvas.height = innerHeight);
-
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  const mouse = new suffice2d.Mouse(canvasWidth / 2, canvasHeight / 2);
   const engine = new suffice2d.Engine({
     subSteps: 4
   });
@@ -24,25 +18,35 @@ onload = function main() {
   const ragdolSize = 40;
   const ragdolMass = 100_000;
   const initialRagdolCount = 1;
+  const fontSize = 12;
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `normal ${fontSize}px Arial`;
 
   canvas.addEventListener('touchstart', function (event) {
-    mouse.setPosition(event.touches[0].clientX, event.touches[0].clientY);
+    engine.mouse.setPosition(
+      event.touches[0].clientX,
+      event.touches[0].clientY
+    );
 
     engine.world.forEach(body => {
-      if (body.containsAnchor(mouse.position)) {
-        mouse.grabBody(body);
-
-        return;
+      if (engine.mouse.touch(body)) {
+        engine.mouse.grab(body);
+        return true;
       }
     });
   });
 
   canvas.addEventListener('touchmove', function (event) {
-    mouse.setPosition(event.touches[0].clientX, event.touches[0].clientY);
+    engine.mouse.setPosition(
+      event.touches[0].clientX,
+      event.touches[0].clientY
+    );
   });
 
   canvas.addEventListener('touchend', function (event) {
-    mouse.dropBody();
+    engine.mouse.drop();
   });
 
   function init() {
@@ -264,7 +268,7 @@ onload = function main() {
 
   function spawnRagdollRect(x, y, size, option = {}) {
     const id = option.id ?? Math.random() * 1826622527;
-    const alpha = 0.8;
+    const alpha = 1;
     const skinColor = option.skinColor ?? `rgba(168, 124, 95, ${alpha})`;
     const shirtColor = option.shirtColor ?? `rgba(76, 152, 179, ${alpha})`;
     const pantColor = option.pantColor ?? `rgba(59, 59, 115, ${alpha})`;
@@ -534,7 +538,7 @@ onload = function main() {
 
   function spawnRagdollCapsule(x, y, size, option = {}) {
     const id = option.id ?? Math.random() * 1826622527;
-    const alpha = 0.8;
+    const alpha = 1;
     const skinColor = option.skinColor ?? `rgba(168, 124, 95, ${alpha})`;
     const shirtColor = option.shirtColor ?? `rgba(76, 152, 179, ${alpha})`;
     const pantColor = option.pantColor ?? `rgba(59, 59, 115, ${alpha})`;
@@ -803,9 +807,9 @@ onload = function main() {
   }
 
   const skinColors = [
-    '#e0af9fd4', // white
-    '#b78465d4', // Brown
-    '#4E4645d4' // Black
+    '#e0af9f', // white
+    '#b78465', // Brown
+    '#4E4645' // Black
   ];
 
   for (let i = 1; i <= initialRagdolCount; i++) {
@@ -827,24 +831,21 @@ onload = function main() {
     spawnRagdollCapsule(x, y, size * 0.5, {
       stiffness: 0.9,
       skinColor: skinColors[0],
-      shirtColor: '#3bb27dd4',
-      pantColor: '#47322cd4'
+      shirtColor: '#3bb27d',
+      pantColor: '#47322c'
     });
   }
 
   function render(ctx, dt) {
-    const fontSize = 12;
-
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-    if (isRenderGrid) engine.renderGrid(ctx);
+    if (isRenderGrid) engine.grid.render(ctx);
     engine.world.forEach(body => {
       body.render(ctx);
       if (isRenderDebug) body.renderDebug(ctx);
     });
-    mouse.renderGrab(ctx);
+    engine.mouse.render(ctx);
 
     ctx.fillStyle = 'white';
-    ctx.font = `normal ${fontSize}px Arial`;
     ctx.fillText(
       `
         ${Math.round(1000 / dt)} FPS 
@@ -856,20 +857,10 @@ onload = function main() {
     );
   }
 
-  engine.event.on('collisionStart', ({ bodyA, bodyB }) => {
-    //
-  });
-  engine.event.on('collisionEnd', ({ bodyA, bodyB }) => {
-    //
-  });
-  engine.event.on('collisionActive', ({ bodyA, bodyB }) => {
-    //
-  });
-
   function update(dt) {
     render(ctx, dt);
     engine.run(dt);
-    mouse.constrainBody(dt);
+    engine.mouse.constrain(dt);
   }
 
   engine.start(update);

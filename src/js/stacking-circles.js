@@ -18,17 +18,8 @@ onload = function main() {
   const engine = new suffice2d.Engine({
     subSteps,
     gravity: 9.81,
-    removeOffBound: true,
-    bound: {
-      x: 0,
-      y: 0,
-      width: canvasWidth,
-      height: canvasHeight,
-      scale: maxSize * 2
-    }
+    removeOffBound: true
   });
-
-  const mouse = new suffice2d.Mouse(canvasWidth / 2, canvasHeight / 2);
 
   // Set canvas resolution
   canvas.width = canvasWidth;
@@ -54,16 +45,18 @@ onload = function main() {
 
   canvas.addEventListener('touchstart', event => {
     event.preventDefault();
-
-    mouse.setPosition(event.touches[0].clientX, event.touches[0].clientY);
-    engine.world.collections.forEach(body => {
-      if (body.containsAnchor(mouse.position)) {
-        mouse.grabBody(body);
-        return null;
+    engine.mouse.setPosition(
+      event.touches[0].clientX,
+      event.touches[0].clientY
+    );
+    engine.world.forEach(body => {
+      if (engine.mouse.touch(body)) {
+        engine.mouse.grab(body);
+        return true;
       }
     });
 
-    if (!mouse.selectedBody) {
+    if (!engine.mouse.selectedBody) {
       handleMouse();
     }
   });
@@ -72,11 +65,12 @@ onload = function main() {
     'touchmove',
     throttle(event => {
       event.preventDefault();
+      engine.mouse.setPosition(
+        event.touches[0].clientX,
+        event.touches[0].clientY
+      );
 
-      mouse.setPosition(event.touches[0].clientX, event.touches[0].clientY);
-      mouse.constrainBody();
-
-      if (!mouse.selectedBody) {
+      if (!engine.mouse.selectedBody) {
         handleMouse();
       }
     }, 1000 / 30)
@@ -84,21 +78,23 @@ onload = function main() {
 
   canvas.addEventListener('touchend', event => {
     event.preventDefault();
-
-    mouse.dropBody();
+    engine.mouse.drop();
   });
 
   canvas.addEventListener('mousedown', event => {
     event.preventDefault();
-    mouse.setPosition(event.offsetX, event.offsetY);
-    engine.world.collections.forEach(body => {
-      if (body.bound.contains(mouse.position)) {
-        mouse.grabBody(body);
-        return null;
+    engine.mouse.setPosition(
+      event.touches[0].clientX,
+      event.touches[0].clientY
+    );
+    engine.world.forEach(body => {
+      if (engine.mouse.touch(body)) {
+        engine.mouse.grab(body);
+        return true;
       }
     });
 
-    if (!mouse.selectedBody) {
+    if (!engine.mouse.selectedBody) {
       handleMouse();
     }
   });
@@ -107,10 +103,9 @@ onload = function main() {
     'mousemove',
     throttle(event => {
       event.preventDefault();
-      mouse.setPosition(event.offsetX, event.offsetY);
-      mouse.constrainBody();
+      engine.mouse.setPosition(event.offsetX, event.offsetY);
 
-      if (!mouse.selectedBody) {
+      if (!engine.mouse.selectedBody) {
         handleMouse();
       }
     }, 5000)
@@ -118,14 +113,13 @@ onload = function main() {
 
   canvas.addEventListener('mouseup', event => {
     event.preventDefault();
-
-    mouse.dropBody();
+    engine.mouse.drop();
   });
 
   function handleMouse() {
     const size = Math.random() * (maxSize - minSize) + minSize;
-    const x = clamp(mouse.position.x, size, canvasWidth - size);
-    const y = clamp(mouse.position.y, size, canvasHeight - size);
+    const x = clamp(engine.mouse.position.x, size, canvasWidth - size);
+    const y = clamp(engine.mouse.position.y, size, canvasHeight - size);
     const option = {
       wireframe,
       restitution
@@ -133,7 +127,7 @@ onload = function main() {
     const circle = new suffice2d.RigidBodies.circle(x, y, size * 0.5, option);
     const rect = new suffice2d.RigidBodies.rectangle(x, y, size, size, option);
 
-    engine.world.addBodies([circle, rect]);
+    engine.world.addBodies([circle]);
   }
 
   function init() {
@@ -175,7 +169,6 @@ onload = function main() {
       length: 3
     };
 
-    
     engine.world.addBodies(Array.from(walls));
   }
 
@@ -185,13 +178,12 @@ onload = function main() {
     const fontSize = 12;
 
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-    if (isRenderGrid) engine.renderGrid(ctx);
+    if (isRenderGrid) engine.grid.render(ctx);
     engine.world.forEach(body => {
       body.render(ctx);
       if (isRenderDebug) body.renderDebug(ctx);
     });
-
-    mouse.renderGrab(ctx);
+    engine.mouse.render(ctx);
 
     ctx.fillStyle = 'white';
     ctx.fillText(
@@ -208,7 +200,8 @@ onload = function main() {
   function update(dt) {
     renderSimulation(ctx, dt);
     engine.run(dt);
+    engine.mouse.constrain(dt);
   }
 
-  engine.animator.start(update);
+  engine.start(update);
 };

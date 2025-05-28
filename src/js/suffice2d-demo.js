@@ -3,7 +3,6 @@ import * as suffice2d from './suffice2d/index.js';
 const targetFPS = 60;
 let canvasWidth = innerWidth;
 let canvasHeight = innerHeight;
-const mouse = new suffice2d.Vec2(canvasWidth / 2, canvasHeight / 2);
 
 let wireframe = false;
 let showGrid = false;
@@ -22,8 +21,8 @@ const engine = new suffice2d.Engine({
   bound: {
     x: 0,
     y: 0,
-    width: canvasWidth,
-    height: canvasHeight
+    width: canvasWidth + bodySize,
+    height: canvasHeight + bodySize
   }
 });
 const world = engine.world;
@@ -32,10 +31,6 @@ const animator = engine.animator;
 const shapeTypes = ['circle', 'capsule', 'rectangle', 'polygon'];
 let shapeTypeIndex = 0;
 let shapeType = shapeTypes[shapeTypeIndex];
-
-let collisionStart = 0;
-let collisionEnd = 0;
-let collisionActive = 0;
 
 function clamp(value, min = 0, max = 1) {
   return value > max ? max : value < min ? min : value;
@@ -59,14 +54,13 @@ document.addEventListener('DOMContentLoaded', function () {
   const debugBtn = document.getElementById('debug');
   const btns = document.querySelectorAll('.btn');
   const ctx = canvas.getContext('2d');
+  let fontSize = 12;
 
   canvas.width = canvasWidth;
   canvas.height = canvasHeight;
-  // canvas.style.width = `${canvasWidth}px`;
-  // canvas.style.height = `${canvasHeight}px`;
-  // ctx.scale(2, 2);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  ctx.font = `normal ${fontSize}px Arial`;
 
   btns.forEach(btn => {
     btn.style.visibility = 'visible';
@@ -75,8 +69,6 @@ document.addEventListener('DOMContentLoaded', function () {
   /**
    * Initialize
    */
-  let ground = null;
-  let obstacle2 = null;
   function init() {
     world.empty();
     shapeTypeIndex = 0;
@@ -85,11 +77,8 @@ document.addEventListener('DOMContentLoaded', function () {
     wireframe = false;
     showGrid = false;
     renderDebug = false;
-    collisionStart = 0;
-    collisionEnd = 0;
-    collisionActive = 0;
 
-    ground = new suffice2d.RigidBodies.rectangle(
+    const ground = new suffice2d.RigidBodies.rectangle(
       canvasWidth * 0.45,
       canvasHeight * 0.9,
       50,
@@ -113,7 +102,7 @@ document.addEventListener('DOMContentLoaded', function () {
         rotation: Math.PI * 0.5
       }
     );
-    obstacle2 = new suffice2d.RigidBodies.rectangle(
+    const obstacle2 = new suffice2d.RigidBodies.rectangle(
       canvasWidth * 0.9,
       canvasHeight * 0.5,
       canvasWidth * 0.5,
@@ -131,65 +120,27 @@ document.addEventListener('DOMContentLoaded', function () {
 
   init();
 
-  engine.event.on('collisionStart', () => {
-    collisionStart++;
-  });
-  engine.event.on('collisionEnd', () => {
-    collisionEnd++;
-  });
-  engine.event.on('collisionActive', () => {
-    collisionActive++;
-  });
-
   /**
    * Render
    */
   function renderSimulation(ctx, deltaTime) {
-    const fontSize = 12;
-
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-    if (showGrid) engine.renderGrid(ctx);
+    if (showGrid) engine.grid.render(ctx);
 
     world.forEach(body => {
       body.render(ctx);
       if (renderDebug) body.renderDebug(ctx);
     });
 
-    // obstacle2.vertices.forEach((point, i) => {
-    //   ctx.fillStyle = 'red';
-    //   ctx.beginPath();
-    //   // ctx.arc(point.x, point.y, 1, 0, Math.PI * 2);
-    //   // ctx.fill();
-    //   ctx.font = `normal ${8}px Arial`;
-    //   ctx.fillText(`${i}`, point.x, point.y);
-    // });
-
     ctx.fillStyle = 'white';
-    ctx.font = `normal ${fontSize}px Arial`;
     ctx.fillText(
       `
-        ${Math.round(1000 / deltaTime)} FPS 
+        ${~~(1000 / deltaTime)} FPS 
         ${world.count} RigidBodies 
         ${subSteps} Sub Steps
       `,
       canvasWidth * 0.5,
       fontSize * 2
-    );
-    ctx.fillText(
-      `
-        > Suffice2D suffice2d Engine 
-      `,
-      canvasWidth * 0.5,
-      fontSize * 3.5
-    );
-    ctx.fillText(
-      `
-        > Start: ${collisionStart} 
-        > End: ${collisionEnd} 
-        > Active: ${collisionActive} 
-      `,
-      canvasWidth * 0.5,
-      fontSize * 5
     );
   }
 
@@ -281,15 +232,17 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function handleMouseMove(eventX, eventY) {
-    mouse.set(eventX, eventY);
+    engine.mouse.setPosition(eventX, eventY);
 
     const position = new suffice2d.Vec2(
-      clamp(mouse.x, bodySize, canvasWidth - bodySize),
-      clamp(mouse.y, bodySize, canvasHeight - bodySize)
+      clamp(engine.mouse.position.x, bodySize, canvasWidth - bodySize),
+      clamp(engine.mouse.position.y, bodySize, canvasHeight - bodySize)
     );
     const option = {
       wireframe,
-      restitution
+      restitution,
+      staticFriction: 0.9,
+      kineticFriction: 0.7
     };
 
     switch (shapeType) {
@@ -353,7 +306,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function handleMouseUp() {
-    mouse.set(canvasWidth / 2, canvasHeight / 2);
+    engine.mouse.setPosition(canvasWidth / 2, canvasHeight / 2);
   }
 
   function handleShapeTypeBtn() {

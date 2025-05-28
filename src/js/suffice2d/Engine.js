@@ -7,6 +7,7 @@ import { World } from './World.js';
 import { Animator } from './Animator.js';
 import { Event } from './Event.js';
 import { Manifold } from './Manifold.js';
+import { Mouse } from './Mouse.js';
 
 export class Engine {
   constructor(option = {}) {
@@ -15,6 +16,7 @@ export class Engine {
     this.world = new World(this);
     this.animator = new Animator(option.targetFPS ?? 60);
     this.event = new Event();
+    this.mouse = new Mouse();
     this.grid = new UniformGrid(
       bound.x ?? 0,
       bound.y ?? 0,
@@ -30,31 +32,18 @@ export class Engine {
 
     this.collisionTypes = {
       'circle-circle': 'circle-circle',
-      'circle-rectangle': 'circle-polygon',
-      'circle-polygon': 'circle-polygon',
-      'circle-capsule': 'circle-capsule',
-      'rectangle-rectangle': 'polygon-polygon',
-      'rectangle-polygon': 'polygon-polygon',
-      'rectangle-capsule': 'polygon-capsule',
-      'polygon-rectangle': 'polygon-polygon',
+      'rectangle-circle': 'polygon-circle',
+      'polygon-circle': 'polygon-circle',
+      
       'polygon-polygon': 'polygon-polygon',
+      'rectangle-polygon': 'polygon-polygon',
+      'rectangle-rectangle': 'polygon-polygon',
+      
       'polygon-capsule': 'polygon-capsule',
+      'rectangle-capsule': 'polygon-capsule',
+      'circle-capsule': 'circle-capsule',
       'capsule-capsule': 'capsule-capsule'
     };
-  }
-
-  renderGrid(ctx) {
-    this.grid.render(ctx);
-
-    // Draw Origin
-    ctx.beginPath();
-    ctx.arc(0, 0, 2, 0, Math.PI * 2);
-    ctx.fillStyle = 'white';
-    ctx.fill();
-  }
-
-  start(callback) {
-    this.animator.start(callback);
   }
 
   pause() {
@@ -65,14 +54,18 @@ export class Engine {
     this.animator.play();
   }
 
+  start(callback) {
+    this.animator.start(callback);
+  }
+
   run(deltaTime = 1000 / 60) {
-    deltaTime /= this.subSteps;
+    const subDeltaTime = deltaTime / this.subSteps;
     const newContactPairs = new Map();
 
     for (let subStep = 1; subStep <= this.subSteps; ++subStep) {
       // Solve Constraints
       for (let i = 0; i < this.world.constraints.length; ++i) {
-        this.world.constraints[i].constrain(deltaTime);
+        this.world.constraints[i].constrain(subDeltaTime);
       }
 
       for (let i = 0; i < this.world.count; ++i) {
@@ -80,12 +73,12 @@ export class Engine {
         const bodyA = this.world.collections[i];
         const acceleration = Vec2.scale(this.gravity, bodyA.inverseMass);
 
-        bodyA.linearVelocity.add(acceleration, deltaTime);
-        if (!bodyA.isStatic) bodyA.translate(bodyA.linearVelocity, deltaTime);
-        if (!bodyA.fixedRot) bodyA.rotate(bodyA.angularVelocity * deltaTime);
-        
+        bodyA.linearVelocity.add(acceleration, subDeltaTime);
+        !bodyA.isStatic && bodyA.translate(bodyA.linearVelocity, subDeltaTime);
+        !bodyA.fixedRot && bodyA.rotate(bodyA.angularVelocity * subDeltaTime);
+
         // Remove contactPoints and contactEdges
-        // This is for visual debugging 
+        // This is for visual debugging
         bodyA.contactPoints.length = 0;
         bodyA.edges.length = 0;
 
@@ -109,6 +102,10 @@ export class Engine {
           );
 
           if (!manifold.collision) continue;
+          
+          for (let i = 0; i < manifold.contactPoints.length; ++i) {
+            bodyA.contactPoints.push(manifold.contactPoints[i]);
+          }
 
           // Collision Cycle
           const idA = bodyA.id;
@@ -118,12 +115,10 @@ export class Engine {
 
           if (!this.contactPairs.has(key)) {
             this.event.emit('collisionStart', contactPair);
-            if (bodyA.onCollisionStart) bodyA.onCollisionStart(bodyB);
+            bodyA.onCollisionStart(bodyB);
           } else {
-            if (!bodyA.isSensor && !bodyB.isSensor) {
-              this.event.emit('collisionActive', contactPair);
-              if (bodyA.onCollisionActive) bodyA.onCollisionActive(bodyB);
-            }
+            this.event.emit('collisionActive', contactPair);
+            bodyA.onCollisionActive(bodyB);
           }
 
           newContactPairs.set(key, contactPair);
@@ -140,10 +135,10 @@ export class Engine {
 
         // World Maintenance
         if (subStep === 1) {
-          this.grid.updateData(bodyA);
+          this.grid.update(bodyA);
 
           if (!bodyA.bound.overlaps(this.grid)) {
-            this.grid.removeData(bodyA);
+            this.grid.remove(bodyA);
 
             if (this.removeOffBound) {
               const last = this.world.count - 1;
@@ -165,9 +160,7 @@ export class Engine {
 
       if (!newContactPairs.has(key)) {
         this.event.emit('collisionEnd', contactPair);
-        if (contactPair.bodyA.onCollisionEnd) {
-          contactPair.bodyA.onCollisionEnd(contactPair.bodyB);
-        }
+        contactPair.bodyA.onCollisionEnd(contactPair.bodyB);
       }
     }
 
@@ -182,8 +175,8 @@ export class Engine {
       case 'circle-circle':
         Collision.detectCircleToCircle(bodyA, bodyB, manifold);
         break;
-      case 'circle-polygon':
-        Collision.detectCircleToRectangle(bodyA, bodyB, manifold);
+      case 'polygon-circle':
+        Collision.detectPolygonToCircle(bodyA, bodyB, manifold);
         break;
       case 'polygon-polygon':
         Collision.detectPolygonToPolygon(bodyA, bodyB, manifold);
