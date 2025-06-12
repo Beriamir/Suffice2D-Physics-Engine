@@ -16,7 +16,6 @@ export class Animator {
   play(callback) {
     this.simulationState = true;
     this.lastTime = performance.now();
-
     this.start(this.callback);
   }
 

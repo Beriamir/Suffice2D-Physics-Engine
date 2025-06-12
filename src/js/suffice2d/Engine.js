@@ -1,6 +1,5 @@
 import { Vec2 } from './Vec2.js';
-import { UniformGrid } from './UniformGrid.js';
-import { SpatialHashGrid } from './SpatialHashGrid.js';
+import { FixedSpatialGrid } from './FixedSpatialGrid.js';
 import { Collision } from './Collision.js';
 import { Solver } from './Solver.js';
 import { World } from './World.js';
@@ -11,34 +10,33 @@ import { Mouse } from './Mouse.js';
 
 export class Engine {
   constructor(option = {}) {
-    const bound = option.bound ?? {};
+    option.grid || (option.grid = {});
 
     this.world = new World(this);
     this.animator = new Animator(option.targetFPS ?? 60);
     this.event = new Event();
     this.mouse = new Mouse();
-    this.grid = new UniformGrid(
-      bound.x ?? 0,
-      bound.y ?? 0,
-      bound.width ?? innerWidth,
-      bound.height ?? innerHeight,
-      bound.scale ?? Math.sqrt(innerWidth) + Math.sqrt(innerHeight)
+    this.spatialGrid = new FixedSpatialGrid(
+      option.grid.x ?? 0,
+      option.grid.y ?? 0,
+      option.grid.width ?? innerWidth,
+      option.grid.height ?? innerHeight,
+      option.grid.scale ?? 64
     );
 
     this.gravity = { x: 0, y: option.gravity ?? 9.81 };
     this.subSteps = option.subSteps ?? 4;
-    this.removeOffBound = option.removeOffBound ?? false;
+    this.removeOffBound = option.removeOffBound || false;
     this.contactPairs = new Map();
+    this.manifolds = new Map();
 
     this.collisionTypes = {
       'circle-circle': 'circle-circle',
       'rectangle-circle': 'polygon-circle',
       'polygon-circle': 'polygon-circle',
-      
       'polygon-polygon': 'polygon-polygon',
       'rectangle-polygon': 'polygon-polygon',
       'rectangle-rectangle': 'polygon-polygon',
-      
       'polygon-capsule': 'polygon-capsule',
       'rectangle-capsule': 'polygon-capsule',
       'circle-capsule': 'circle-capsule',
@@ -46,21 +44,10 @@ export class Engine {
     };
   }
 
-  pause() {
-    this.animator.pause();
-  }
-
-  play() {
-    this.animator.play();
-  }
-
-  start(callback) {
-    this.animator.start(callback);
-  }
-
   run(deltaTime = 1000 / 60) {
     const subDeltaTime = deltaTime / this.subSteps;
     const newContactPairs = new Map();
+    const newManifolds = new Map();
 
     for (let subStep = 1; subStep <= this.subSteps; ++subStep) {
       // Solve Constraints
@@ -68,43 +55,33 @@ export class Engine {
         this.world.constraints[i].constrain(subDeltaTime);
       }
 
-      for (let i = 0; i < this.world.count; ++i) {
+      for (let i = 0; i < this.world.rigidBodies.length; ++i) {
         // Integration
-        const bodyA = this.world.collections[i];
+        const bodyA = this.world.rigidBodies[i];
         const acceleration = Vec2.scale(this.gravity, bodyA.inverseMass);
 
         bodyA.linearVelocity.add(acceleration, subDeltaTime);
         !bodyA.isStatic && bodyA.translate(bodyA.linearVelocity, subDeltaTime);
         !bodyA.fixedRot && bodyA.rotate(bodyA.angularVelocity * subDeltaTime);
 
-        // Remove contactPoints and contactEdges
-        // This is for visual debugging
-        bodyA.contactPoints.length = 0;
-        bodyA.edges.length = 0;
-
         // Broad Phase
-        const nearby = this.grid.queryNearby(bodyA);
+        const nearby = this.spatialGrid.query(bodyA);
 
         for (const bodyB of nearby) {
           if (
-            !bodyA.jointSelfCollision &&
-            !bodyB.jointSelfCollision &&
-            bodyA.jointId === bodyB.jointId
+            !bodyA.bound.overlaps(bodyB.bound) ||
+            (!bodyA.jointSelfCollision &&
+              !bodyB.jointSelfCollision &&
+              bodyA.jointId === bodyB.jointId)
           ) {
             continue;
           }
 
           // Narrow Phase
-          const manifold = this._getCollisionManifold(
-            bodyA,
-            bodyB,
-            new Manifold()
-          );
+          const manifold = this._getCollisionManifold(bodyA, bodyB);
 
-          if (!manifold.collision) continue;
-          
-          for (let i = 0; i < manifold.contactPoints.length; ++i) {
-            bodyA.contactPoints.push(manifold.contactPoints[i]);
+          if (!manifold.collision) {
+            continue;
           }
 
           // Collision Cycle
@@ -127,37 +104,39 @@ export class Engine {
           if (
             bodyA.isSensor ||
             bodyB.isSensor ||
-            (bodyA.isStatic && bodyB.isStatic)
+            (!bodyA.collision && !bodyB.collision)
           ) {
             continue;
-          } else Solver.solveCollision(bodyA, bodyB, manifold);
+          } else {
+            Solver.solveCollision(bodyA, bodyB, manifold, subDeltaTime);
+          }
+
+          newManifolds.set(key, manifold);
         }
 
         // World Maintenance
-        if (subStep === 1) {
-          this.grid.update(bodyA);
-
-          if (!bodyA.bound.overlaps(this.grid)) {
-            this.grid.remove(bodyA);
+        if (subStep == 1) {
+          if (!bodyA.bound.overlaps(this.spatialGrid)) {
+            this.spatialGrid.remove(bodyA);
 
             if (this.removeOffBound) {
-              const last = this.world.count - 1;
+              const last = this.world.rigidBodies.length - 1;
 
-              this.world.collections[i] = this.world.collections[last];
-              this.world.collections[last] = bodyA;
-              this.world.collections.pop();
-
-              continue;
+              this.world.rigidBodies[i] = this.world.rigidBodies[last];
+              this.world.rigidBodies.pop();
+              --i;
             }
+          } else {
+            this.spatialGrid.update(bodyA);
           }
         }
       }
+
+      this.mouse.constrain(deltaTime);
     }
 
     // Collision Cycle Extended
-    for (const key of this.contactPairs.keys()) {
-      const contactPair = this.contactPairs.get(key);
-
+    for (const [key, contactPair] of this.contactPairs) {
       if (!newContactPairs.has(key)) {
         this.event.emit('collisionEnd', contactPair);
         contactPair.bodyA.onCollisionEnd(contactPair.bodyB);
@@ -165,33 +144,35 @@ export class Engine {
     }
 
     this.contactPairs = newContactPairs;
+    this.manifolds = newManifolds;
   }
 
-  _getCollisionManifold(bodyA, bodyB, manifold) {
+  _getCollisionManifold(bodyA, bodyB) {
     const type = `${bodyA.label}-${bodyB.label}`;
-    const collisionType = this.collisionTypes[type];
+    const labels = this.collisionTypes[type];
+    let manifold = null;
 
-    switch (collisionType) {
+    switch (labels) {
       case 'circle-circle':
-        Collision.detectCircleToCircle(bodyA, bodyB, manifold);
+        manifold = Collision.detectCircleToCircle(bodyA, bodyB);
         break;
       case 'polygon-circle':
-        Collision.detectPolygonToCircle(bodyA, bodyB, manifold);
+        manifold = Collision.detectPolygonToCircle(bodyA, bodyB);
         break;
       case 'polygon-polygon':
-        Collision.detectPolygonToPolygon(bodyA, bodyB, manifold);
+        manifold = Collision.detectPolygonToPolygon(bodyA, bodyB);
         break;
       case 'polygon-capsule':
-        Collision.detectPolygonToCapsule(bodyA, bodyB, manifold);
+        manifold = Collision.detectPolygonToCapsule(bodyA, bodyB);
         break;
       case 'circle-capsule':
-        Collision.detectCircleToCapsule(bodyA, bodyB, manifold);
+        manifold = Collision.detectCircleToCapsule(bodyA, bodyB);
         break;
       case 'capsule-capsule':
-        Collision.detectCapsuleToCapsule(bodyA, bodyB, manifold);
+        manifold = Collision.detectCapsuleToCapsule(bodyA, bodyB);
         break;
     }
 
-    return manifold;
+    return manifold || new Manifold(false);
   }
 }

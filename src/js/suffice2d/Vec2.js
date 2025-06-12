@@ -26,20 +26,24 @@ export class Vec2 {
     return this;
   }
 
-  negate() {
-    this.x *= -1;
-    this.y *= -1;
-    return this;
-  }
-
   random() {
     this.x = Math.random() - 0.5;
     this.y = Math.random() - 0.5;
     return this;
   }
 
-  perp(signed = 1) {
-    return new Vec2(-this.y * signed, this.x * signed);
+  leftPerp() {
+    return new Vec2(-this.y, this.x);
+  }
+
+  rightPerp() {
+    return new Vec2(this.y, -this.x);
+  }
+
+  negate() {
+    this.x *= -1;
+    this.y *= -1;
+    return this;
   }
 
   rotate(angle) {
@@ -50,8 +54,8 @@ export class Vec2 {
   }
 
   equal(v) {
-    const epsilon = 1e-2;
-    return Vec2.distanceSq(this, v) <= epsilon;
+    const epsilon = 1e-6;
+    return Vec2.distanceSq(this, v) <= epsilon * epsilon;
   }
 
   string() {
@@ -68,19 +72,19 @@ export class Vec2 {
     return this;
   }
 
-  subtract(v, s = 1) {
+  sub(v, s = 1) {
     this.x -= v.x * s;
     this.y -= v.y * s;
     return this;
   }
 
-  divide(v, s = 1) {
+  div(v, s = 1) {
     this.x /= v.x * s;
     this.y /= v.y * s;
     return this;
   }
 
-  multiply(v, s = 1) {
+  mult(v, s = 1) {
     this.x *= v.x * s;
     this.y *= v.y * s;
     return this;
@@ -111,7 +115,7 @@ export class Vec2 {
   normalize(length = 0) {
     length = length ? length : this.magnitude();
 
-    if (length === 0) return this.zero();
+    if (length == 0) return this.zero();
     else return this.scale(1 / length);
   }
 
@@ -119,7 +123,7 @@ export class Vec2 {
     return new Vec2(v1.x + v2.x * scalar, v1.y + v2.y * scalar);
   }
 
-  static subtract(v1, v2) {
+  static sub(v1, v2) {
     return new Vec2(v1.x - v2.x, v1.y - v2.y);
   }
 
@@ -128,10 +132,7 @@ export class Vec2 {
   }
 
   static vectorTripleProduct(v1, v2, v3) {
-    return Vec2.subtract(
-      Vec2.scale(v2, v1.dot(v3)),
-      Vec2.scale(v1, v3.dot(v2))
-    );
+    return Vec2.sub(Vec2.scale(v2, v1.dot(v3)), Vec2.scale(v1, v3.dot(v2)));
   }
 
   static cross3(v1, v2, v3) {
@@ -139,25 +140,21 @@ export class Vec2 {
   }
 
   static distance(v1, v2) {
-    const dir = Vec2.subtract(v1, v2);
+    const dir = Vec2.sub(v1, v2);
     return Math.sqrt(dir.x * dir.x + dir.y * dir.y);
   }
 
   static distanceSq(v1, v2) {
-    const dir = Vec2.subtract(v1, v2);
+    const dir = Vec2.sub(v1, v2);
 
     return dir.x * dir.x + dir.y * dir.y;
   }
 
-  static normalized(v, length = 0) {
+  static normalize(v, length = 0) {
     length = length ? length : v.magnitude();
 
-    if (length === 0) return new Vec2();
+    if (length == 0) return new Vec2();
     else return Vec2.scale(v, 1 / length);
-  }
-
-  static perp(v) {
-    return new Vec2(-v.y, v.x);
   }
 
   static negate(v) {

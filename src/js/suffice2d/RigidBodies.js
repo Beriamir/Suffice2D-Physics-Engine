@@ -94,8 +94,8 @@ export const RigidBodies = {
       id: ++RigidBodies.ids,
       label: 'capsule',
       position: new Vec2(x, y),
-      startPoint: new Vec2(x, y - height * 0.5),
-      endPoint: new Vec2(x, y + height * 0.5),
+      center1: new Vec2(x, y - height * 0.5),
+      center2: new Vec2(x, y + height * 0.5),
       vertices: vertices,
       radius: radius,
       height: height
@@ -126,7 +126,7 @@ export const RigidBodies = {
     vertices = vertices.map(point => new Vec2(point.x, point.y));
 
     const centroid = Vertices.centroid(vertices);
-    const direction = Vec2.subtract(vertices[0], centroid);
+    const direction = Vec2.sub(vertices[0], centroid);
     const axisPoint = Vec2.add(centroid, direction);
     const properties = {
       id: ++RigidBodies.ids,

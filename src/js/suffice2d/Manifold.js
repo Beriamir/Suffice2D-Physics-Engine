@@ -1,21 +1,19 @@
-import { Vec2 } from './Vec2.js';
-
 export class Manifold {
-  constructor() {
-    this.id = null;
-    this.collision = null;
-    this.normal = new Vec2();
-    this.overlapDepth = Infinity;
-    this.contactPoints = [];
+  constructor(collision, normal, overlapDepth, contactPoints) {
+    this.collision = collision;
+    this.normal = normal ?? null;
+    this.overlapDepth = overlapDepth ?? null;
+    this.contactPoints = contactPoints ?? null;
   }
 
-  reset() {
-    this.id = null;
-    this.collision = null;
-    this.normal.zero();
-    this.overlapDepth = Infinity;
-    this.contactPoints.length = 0;
+  render(ctx) {
+    ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < this.contactPoints.length; ++i) {
+      const point = this.contactPoints[i];
 
-    return this;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 1, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 }

@@ -36,7 +36,7 @@ export class Bnd2 {
         break;
 
       case 'capsule':
-        for (const vertex of [this.body.startPoint, this.body.endPoint]) {
+        for (const vertex of [this.body.center1, this.body.center2]) {
           if (vertex.x - radius < this.min.x) this.min.x = vertex.x - radius;
           if (vertex.y - radius < this.min.y) this.min.y = vertex.y - radius;
           if (vertex.x + radius > this.max.x) this.max.x = vertex.x + radius;
@@ -90,7 +90,7 @@ export class Bnd2 {
   }
 
   render(ctx) {
-    ctx.strokeStyle = '#ffffff80';
+    ctx.strokeStyle = '#ffffff40';
     ctx.strokeRect(this.min.x, this.min.y, this.width, this.height);
   }
 }

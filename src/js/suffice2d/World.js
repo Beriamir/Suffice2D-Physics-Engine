@@ -1,21 +1,13 @@
 export class World {
   constructor(engine) {
     this.engine = engine;
-    this.collections = [];
+    this.rigidBodies = [];
     this.constraints = [];
   }
 
-  get count() {
-    return this.collections.length;
-  }
-
-  set count(value) {
-    this.collections.length = value;
-  }
-
   forEach(callback) {
-    for (let i = 0; i < this.count; ++i) {
-      if (callback(this.collections[i], i)) break;
+    for (let i = 0; i < this.rigidBodies.length; ++i) {
+      if (callback(this.rigidBodies[i], i)) break;
     }
   }
 
@@ -24,68 +16,60 @@ export class World {
   }
 
   addBody(body) {
-    for (let i = 0; i < this.count; ++i) {
-      const currBody = this.collections[i];
-
-      if (currBody.id === body.id) return;
+    for (let i = 0; i < this.rigidBodies.length; ++i) {
+      if (this.rigidBodies[i].id == body.id) return;
     }
 
-    this.collections.push(body);
-    this.engine.grid.add(body);
+    this.rigidBodies.push(body);
+    this.engine.spatialGrid.add(body);
   }
 
   removeBody(body) {
-    const index = this.collections.indexOf(body);
-    const lastIndex = this.count - 1;
-    const temp = this.collections[index];
+    const index = this.rigidBodies.indexOf(body);
+    const lastIndex = this.rigidBodies.length - 1;
 
-    this.collections[index] = this.collections[lastIndex];
-    this.collections[lastIndex] = temp;
-    this.collections.pop();
-    this.engine.grid.remove(body);
+    this.rigidBodies[index] = this.rigidBodies[lastIndex];
+    this.rigidBodies.pop();
+    this.engine.spatialGrid.remove(body);
   }
 
   addBodies(bodies) {
     for (let i = 0; i < bodies.length; ++i) {
       const body = bodies[i];
+      let exists = false;
 
-      for (let j = 0; j < this.count; ++j) {
-        const currBody = this.collections[j];
-
-        if (currBody.id === body.id) return;
+      for (let j = 0; j < this.rigidBodies.length; ++j) {
+        if (this.rigidBodies[j].id == body.id) {
+          exists = true;
+          break;
+        }
       }
 
-      this.collections.push(body);
-      this.engine.grid.add(body);
+      if (!exists) {
+        this.rigidBodies.push(body);
+        this.engine.spatialGrid.add(body);
+      }
     }
   }
 
   removeBodies(bodies) {
-    bodies.forEach(body => {
-      const index = this.collections.indexOf(body);
-      const lastIndex = this.count - 1;
-      const temp = this.collections[index];
+    for (let i = 0; i < bodies.length; ++i) {
+      const body = bodies[i];
+      const index = this.rigidBodies.indexOf(body);
+      const lastIndex = this.rigidBodies.length - 1;
 
-      this.collections[index] = this.collections[lastIndex];
-      this.collections[lastIndex] = temp;
-      this.collections.pop();
-      this.engine.grid.remove(body);
-    });
+      this.rigidBodies[index] = this.rigidBodies[lastIndex];
+      this.rigidBodies.pop();
+      this.engine.spatialGrid.remove(body);
+    }
   }
 
   empty() {
-    this.forEach(body => {
-      this.engine.grid.remove(body);
-    });
-
-    this.count = 0;
+    this.forEach(body => this.engine.spatialGrid.remove(body));
+    this.rigidBodies = [];
   }
 
   render(ctx) {
-    this.forEach(body => {
-      body.bound.render(ctx);
-      body.render(ctx);
-      body.renderContacts(ctx);
-    });
+    this.forEach(body => body.render(ctx));
   }
 }

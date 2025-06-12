@@ -25,11 +25,11 @@ export class RigidBody {
         case 'axisPoint':
           this.axisPoint = value;
           break;
-        case 'startPoint':
-          this.startPoint = value;
+        case 'center1':
+          this.center1 = value;
           break;
-        case 'endPoint':
-          this.endPoint = value;
+        case 'center2':
+          this.center2 = value;
           break;
         case 'vertices':
           this.vertices = value;
@@ -50,17 +50,32 @@ export class RigidBody {
     this.allVertices = [];
 
     if (this.axisPoint) this.allVertices.push(this.axisPoint);
-    if (this.startPoint) this.allVertices.push(this.startPoint);
-    if (this.endPoint) this.allVertices.push(this.endPoint);
+    if (this.center1) this.allVertices.push(this.center1);
+    if (this.center2) this.allVertices.push(this.center2);
     if (this.vertices) this.allVertices.push(...this.vertices);
 
     this.linearVelocity = option.linearVelocity ?? new Vec2();
     this.angularVelocity = option.angularVelocity ?? 0;
-    this.staticFriction = option.staticFriction ?? 0.6;
-    this.kineticFriction = option.kineticFriction ?? 0.4;
+    this.staticFriction = option.staticFriction ?? 0.0;
+    this.kineticFriction = option.kineticFriction ?? 0.0;
     this.restitution = option.restitution ?? 0.0;
     this.density = option.density ?? 2700;
     this.thickness = option.thickness ?? 0.01;
+
+    this.restitution =
+      this.restitution > 1 ? 1 : this.restitution < 0 ? 0 : this.restitution;
+    this.staticFriction =
+      this.staticFriction > 1
+        ? 1
+        : this.staticFriction < 0
+        ? 0
+        : this.staticFriction;
+    this.kineticFriction =
+      this.kineticFriction > 1
+        ? 1
+        : this.kineticFriction < 0
+        ? 0
+        : this.kineticFriction;
 
     switch (this.label) {
       case 'circle':
@@ -116,11 +131,13 @@ export class RigidBody {
     this.inverseMass = 1 / this.mass;
     this.inverseInertia = 1 / this.inertia;
 
-    this.isSleeping = false;
     this.isSensor = option.isSensor ?? false;
     this.isStatic = option.isStatic ?? false;
     this.fixedRot = option.fixedRot ?? false;
     this.rotation = option.rotation ?? 0;
+    this.prevRotation = this.rotation;
+    this.collision = option.collision ?? true;
+
     this.wireframe = option.wireframe ?? false;
     this.jointSelfCollision = true;
     this.jointId = Math.random() * 10276262;
@@ -129,17 +146,16 @@ export class RigidBody {
     this.bound = new Bnd2(this);
 
     if (this.isStatic) {
-      this.inverseMass = 0;
-      this.restitution = 1;
+      this.restitution = 1.0;
+      this.inverseMass = 0.0;
       this.color = 'hsla(0, 0%, 50%, ';
     }
 
     if (this.fixedRot) {
-      this.inverseInertia = 0;
+      this.inverseInertia = 0.0;
+      this.color = 'hsla(0, 0%, 50%, ';
     }
 
-    this.contactPoints = [];
-    this.edges = [];
     this.anchorPoints = [];
     this.anchorPointId = -1;
     this.anchorPairs = [];
@@ -193,8 +209,8 @@ export class RigidBody {
           const a = this.vertices[i];
           const b = this.vertices[(i + 1) % n];
 
-          const ab = Vec2.subtract(b, a);
-          const ap = Vec2.subtract(anchor, a);
+          const ab = Vec2.sub(b, a);
+          const ap = Vec2.sub(anchor, a);
           const cross = ab.cross(ap);
 
           if (cross < 0) {
@@ -207,16 +223,16 @@ export class RigidBody {
       }
 
       case 'capsule': {
-        const ab = Vec2.subtract(this.endPoint, this.startPoint);
-        const ap = Vec2.subtract(anchor, this.startPoint);
+        const ab = Vec2.sub(this.center2, this.center1);
+        const ap = Vec2.sub(anchor, this.center1);
         const abLengthSq = ab.magnitudeSq();
         const projection = ap.dot(ab) / abLengthSq;
-        const contactPoint = Vec2.add(this.startPoint, ab, projection);
+        const contactPoint = Vec2.add(this.center1, ab, projection);
 
         if (projection < 0) {
-          contactPoint.copy(this.startPoint);
+          contactPoint.copy(this.center1);
         } else if (projection > 1) {
-          contactPoint.copy(this.endPoint);
+          contactPoint.copy(this.center2);
         }
 
         const distanceSq = Vec2.distanceSq(contactPoint, anchor);
@@ -234,67 +250,79 @@ export class RigidBody {
   }
 
   addAnchorVelocity(anchorA, anchorB, deltaTime = 1000 / 60) {
-    const delta = Vec2.subtract(anchorB, anchorA);
+    const delta = Vec2.sub(anchorB, anchorA);
     const distance = delta.magnitude();
 
-    if (distance < 1) return;
+    if (distance === 0) return;
 
     const normal = delta.scale(1 / distance);
-    const correction = distance - 0;
 
-    const vA = this.linearVelocity;
-    const wA = this.angularVelocity;
+    const beta = 0.01;
+    const slop = 0.01;
+    const stiffness = 0.1;
+    const sFriction = Math.max(this.staticFriction, 0);
+    const kFriction = Math.max(this.kineticFriction, 0);
+
+    let rAPerp = Vec2.sub(anchorA, this.position).leftPerp();
+    let rBPerp = Vec2.sub(anchorB, anchorB).leftPerp();
+    let velNormal = Vec2.sub(
+      Vec2.add(new Vec2(), Vec2.scale(rBPerp, 0)),
+      Vec2.add(this.linearVelocity, Vec2.scale(rAPerp, this.angularVelocity))
+    ).dot(normal);
+
     const mA = this.inverseMass;
+    const mB = this.inverseMass;
     const iA = this.inverseInertia;
-
-    const rA = Vec2.subtract(anchorA, this.position);
-    const rAPerp = rA.perp();
-    const vTanA = Vec2.scale(rAPerp, wA);
-    const relVel = Vec2.subtract(new Vec2(), Vec2.add(vA, vTanA));
-    const velNormal = relVel.dot(normal);
-
-    const tangent = Vec2.subtract(
-      relVel,
-      Vec2.scale(normal, velNormal)
-    ).normalize();
+    const iB = this.inverseInertia;
 
     const rnA = rAPerp.dot(normal);
+    const rnB = rBPerp.dot(normal);
+    const effNormalMass = mA + mB + rnA * rnA * iA + rnB * rnB * iB;
+    let normalImpulse = 0;
+
+    if (effNormalMass != 0) {
+      const bias = (Math.max(distance - slop, 0) * beta) / deltaTime;
+
+      normalImpulse = -(stiffness * velNormal + bias) / effNormalMass;
+    }
+
+    this.angularVelocity -= rnA * normalImpulse * iA;
+    this.linearVelocity.sub(normal, normalImpulse * mA);
+
+    // Frictional Impulse
+    rAPerp = Vec2.sub(anchorA, this.position).leftPerp();
+    rBPerp = Vec2.sub(anchorB, anchorB).leftPerp();
+    const relVel = Vec2.sub(
+      Vec2.add(new Vec2(), Vec2.scale(rBPerp, 0)),
+      Vec2.add(this.linearVelocity, Vec2.scale(rAPerp, this.angularVelocity))
+    );
+    const tangent = Vec2.sub(
+      relVel,
+      Vec2.scale(normal, relVel.dot(normal))
+    ).normalize();
+
     const rtA = rAPerp.dot(tangent);
-    const effMassN = mA + rnA * rnA * iA;
-    const effMassT = mA + rtA * rtA * iA;
+    const rtB = rBPerp.dot(tangent);
+    const effTangentMass = mA + mB + rtA * rtA * iA + rtB * rtB * iB;
+    let frictionImpulse = 0;
 
-    if (effMassN === 0 || effMassT === 0) {
-      return;
+    if (effTangentMass != 0) {
+      frictionImpulse = relVel.dot(tangent) / effTangentMass;
+
+      if (Math.abs(frictionImpulse) >= normalImpulse * sFriction) {
+        frictionImpulse = normalImpulse * kFriction;
+      }
     }
 
-    const springiness = 0.9;
-    const beta = 0.1 / deltaTime;
-    const slop = correction * 0.9;
-    const bias = Math.max(correction - slop, 0) * beta;
-    let impulse = -((1 - springiness) * velNormal + bias) / effMassN;
-    let friction = relVel.dot(tangent) / effMassT;
-
-    if (Math.abs(friction) >= impulse * this.staticFriction) {
-      friction = impulse * this.kineticFriction;
-    }
-
-    const torqueN = rnA * impulse * iA;
-    const torqueT = rtA * friction * iA;
-    const impulseVector = Vec2.scale(normal, -impulse * mA);
-    const frictionVector = Vec2.scale(tangent, -friction * mA);
-
-    this.angularVelocity += -torqueN;
-    this.angularVelocity += -torqueT;
-
-    this.linearVelocity.add(impulseVector);
-    this.linearVelocity.add(frictionVector);
+    this.angularVelocity -= rtA * frictionImpulse * iA;
+    this.linearVelocity.sub(tangent, frictionImpulse * mA);
   }
 
   setPosition(x, y) {
     this.prevPosition.copy(this.position);
     this.position.set(x, y);
 
-    const offset = Vec2.subtract(this.position, this.prevPosition);
+    const offset = Vec2.sub(this.position, this.prevPosition);
 
     for (let i = 0; i < this.allVertices.length; ++i) {
       const vertex = this.allVertices[i];
@@ -334,21 +362,28 @@ export class RigidBody {
     for (let i = 0; i < this.allVertices.length; ++i) {
       const vertex = this.allVertices[i];
 
-      vertex.copy(
-        vertex.subtract(this.position).rotate(angle).add(this.position)
-      );
+      vertex.copy(vertex.sub(this.position).rotate(angle).add(this.position));
     }
 
     for (let i = 0; i < this.anchorPoints.length; ++i) {
       const vertex = this.anchorPoints[i];
 
-      vertex.copy(
-        vertex.subtract(this.position).rotate(angle).add(this.position)
-      );
+      vertex.copy(vertex.sub(this.position).rotate(angle).add(this.position));
     }
 
+    this.prevRotation = this.rotation;
     this.rotation += angle;
     this.bound.update();
+  }
+
+  round(radius = 10) {
+    this.vertices = Vertices.chamfer(this.vertices, radius);
+
+    this.allVertices = [];
+    this.axisPoint = this.vertices[0].clone();
+
+    if (this.axisPoint) this.allVertices.push(this.axisPoint);
+    if (this.vertices) this.allVertices.push(...this.vertices);
   }
 
   render(ctx) {
@@ -368,21 +403,21 @@ export class RigidBody {
       }
 
       case 'capsule': {
-        const startDir = Vec2.subtract(this.vertices[0], this.startPoint);
-        const endDir = Vec2.subtract(this.vertices[1], this.startPoint);
+        const startDir = Vec2.sub(this.vertices[0], this.center1);
+        const endDir = Vec2.sub(this.vertices[1], this.center1);
         const startAngle = Math.atan2(startDir.y, startDir.x);
         const endAngle = Math.atan2(endDir.y, endDir.x);
 
         ctx.arc(
-          this.startPoint.x,
-          this.startPoint.y,
+          this.center1.x,
+          this.center1.y,
           this.radius,
           startAngle,
           endAngle
         );
         ctx.arc(
-          this.endPoint.x,
-          this.endPoint.y,
+          this.center2.x,
+          this.center2.y,
           this.radius,
           endAngle,
           startAngle
@@ -397,8 +432,8 @@ export class RigidBody {
       ctx.moveTo(this.position.x, this.position.y);
       ctx.lineTo(this.axisPoint.x, this.axisPoint.y);
     } else {
-      ctx.moveTo(this.startPoint.x, this.startPoint.y);
-      ctx.lineTo(this.endPoint.x, this.endPoint.y);
+      ctx.moveTo(this.center1.x, this.center1.y);
+      ctx.lineTo(this.center2.x, this.center2.y);
     }
 
     for (let i = 0; i < this.anchorPairs.length; ++i) {
@@ -415,31 +450,16 @@ export class RigidBody {
       ctx.fill();
       ctx.stroke();
     } else {
-      ctx.strokeStyle = this.isSleeping ? '#ffffff80' : '#ffffff';
+      ctx.strokeStyle = this.isSleeping ? '#ffffff40' : '#ffffff80';
       ctx.stroke();
     }
 
-    this.renderAnchorPoints(ctx);
-  }
-
-  renderAnchorPoints(ctx) {
-    ctx.strokeStyle = this.customColor ? '#ffffff' : this.color + `1)`;
     for (let i = 0; i < this.anchorPoints.length; ++i) {
       const point = this.anchorPoints[i];
 
       ctx.beginPath();
       ctx.arc(point.x, point.y, 3, 0, Math.PI * 2);
       ctx.stroke();
-    }
-  }
-
-  renderContacts(ctx) {
-    for (let i = 0; i < this.contactPoints.length; ++i) {
-      const point = this.contactPoints[i];
-
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, 1, 0, Math.PI * 2);
-      ctx.fill();
     }
   }
 
@@ -452,14 +472,7 @@ export class RigidBody {
       this.position.x + this.linearVelocity.x * maxLength,
       this.position.y + this.linearVelocity.y * maxLength
     );
-    ctx.stroke();
-  }
-
-  renderDebug(ctx) {
-    this.bound.render(ctx);
-    ctx.fillStyle = '#ffffff80';
     ctx.strokeStyle = '#ffffff80';
-    this.renderContacts(ctx);
-    this.renderVelocity(ctx);
+    ctx.stroke();
   }
 }

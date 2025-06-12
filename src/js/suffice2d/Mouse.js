@@ -1,7 +1,7 @@
 import { Vec2 } from './Vec2.js';
 
 export class Mouse {
-  constructor(x = 0, y = 0) {
+  constructor(x, y) {
     this.position = new Vec2(x, y);
     this.selectedBody = null;
     this.selectedAnchor = null;
@@ -34,8 +34,8 @@ export class Mouse {
           const a = body.vertices[i];
           const b = body.vertices[(i + 1) % n];
 
-          const ab = Vec2.subtract(b, a);
-          const ap = Vec2.subtract(this.position, a);
+          const ab = Vec2.sub(b, a);
+          const ap = Vec2.sub(this.position, a);
           const cross = ab.cross(ap);
 
           if (cross < 0) {
@@ -48,16 +48,16 @@ export class Mouse {
       }
 
       case 'capsule': {
-        const ab = Vec2.subtract(body.endPoint, body.startPoint);
-        const ap = Vec2.subtract(this.position, body.startPoint);
+        const ab = Vec2.sub(body.center2, body.center1);
+        const ap = Vec2.sub(this.position, body.center1);
         const abLengthSq = ab.magnitudeSq();
         const projection = ap.dot(ab) / abLengthSq;
-        const contactPoint = Vec2.add(body.startPoint, ab, projection);
+        const contactPoint = Vec2.add(body.center1, ab, projection);
 
         if (projection < 0) {
-          contactPoint.copy(body.startPoint);
+          contactPoint.copy(body.center1);
         } else if (projection > 1) {
-          contactPoint.copy(body.endPoint);
+          contactPoint.copy(body.center2);
         }
 
         const distanceSq = Vec2.distanceSq(contactPoint, this.position);

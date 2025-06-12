@@ -3,10 +3,17 @@ import * as suffice2d from './suffice2d/index.js';
 onload = function main() {
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
-  let canvasWidth = (canvas.width = innerWidth);
-  let canvasHeight = (canvas.height = innerHeight);
+  let canvasWidth = (canvas.width = 800);
+  let canvasHeight = (canvas.height = 600);
   const engine = new suffice2d.Engine({
-    subSteps: 4
+    subSteps: 4,
+    grid: {
+      x: 0,
+      y: 0,
+      width: canvasWidth,
+      height: canvasHeight,
+      scale: 50
+    }
   });
   const wireframe = false;
   const isRenderGrid = false;
@@ -15,7 +22,7 @@ onload = function main() {
   const circleRadius = 30;
   const density = null;
   const initialCount = 1;
-  const ragdolSize = 40;
+  const ragdolSize = 30;
   const ragdolMass = 100_000;
   const initialRagdolCount = 1;
   const fontSize = 12;
@@ -24,11 +31,8 @@ onload = function main() {
   ctx.textBaseline = 'middle';
   ctx.font = `normal ${fontSize}px Arial`;
 
-  canvas.addEventListener('touchstart', function (event) {
-    engine.mouse.setPosition(
-      event.touches[0].clientX,
-      event.touches[0].clientY
-    );
+  canvas.addEventListener('pointerdown', function (event) {
+    engine.mouse.setPosition(event.offsetX, event.offsetY);
 
     engine.world.forEach(body => {
       if (engine.mouse.touch(body)) {
@@ -38,14 +42,11 @@ onload = function main() {
     });
   });
 
-  canvas.addEventListener('touchmove', function (event) {
-    engine.mouse.setPosition(
-      event.touches[0].clientX,
-      event.touches[0].clientY
-    );
+  window.addEventListener('pointermove', function (event) {
+    engine.mouse.setPosition(event.offsetX, event.offsetY);
   });
 
-  canvas.addEventListener('touchend', function (event) {
+  window.addEventListener('pointerup', function (event) {
     engine.mouse.drop();
   });
 
@@ -123,7 +124,7 @@ onload = function main() {
     // Fixed Joint
     for (let i = 0; i < 4; i++) {
       const x = canvasWidth * 0.2;
-      const y = i * jointRadius * 1.5 + 100;
+      const y = i * jointRadius * 4 + 100;
       const body = new suffice2d.RigidBodies.rectangle(
         x,
         y,
@@ -131,9 +132,9 @@ onload = function main() {
         jointRadius * 4,
         {
           wireframe,
-          isStatic: i === 0,
-          staticFriction: 0.3,
-          kineticFriction: 0.1
+          // isStatic: i === 0,
+          staticFriction: 0.9,
+          kineticFriction: 0.7
         }
       );
 
@@ -145,7 +146,7 @@ onload = function main() {
         const anchorB = body.position.clone();
 
         anchorA.y += prev.height * 0.5;
-        anchorB.y -= body.height * 0.25;
+        anchorB.y -= body.height * 0.5;
         fixedJoint.addJoint(prev, body, anchorA, anchorB, {
           stiffness: 0.5
         });
@@ -153,18 +154,18 @@ onload = function main() {
     }
 
     // Revolute Joint
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 5; i++) {
       const x = canvasWidth * 0.4;
-      const y = i * jointRadius * 1.5 + 100;
+      const y = i * jointRadius * 2 + 100;
       const body = new suffice2d.RigidBodies.rectangle(
         x,
         y,
-        jointRadius,
-        jointRadius * 2,
+        jointRadius * 1.5,
+        jointRadius * 3,
         {
           wireframe,
-          isStatic: i === 0,
-          fixedRot: i === 0,
+          // isStatic: i === 0,
+          // fixedRot: i === 0,
           staticFriction: 0.3,
           kineticFriction: 0.1
         }
@@ -178,7 +179,7 @@ onload = function main() {
         const anchorB = body.position.clone();
 
         anchorA.y += prev.height * 0.5;
-        anchorB.y -= body.height * 0.25;
+        anchorB.y -= body.height * 0.5;
         revoluteJoint.addJoint(prev, body, anchorA, anchorB, {
           stiffness: 0.5,
           minAngle: -Math.PI * 0.2,
@@ -188,13 +189,13 @@ onload = function main() {
     }
 
     // Spring Joint
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 2; i++) {
       const x = canvasWidth * 0.6;
       const y = i * jointRadius * 2 + 100;
-      const body = new suffice2d.RigidBodies.circle(x, y, jointRadius, {
+      const body = new suffice2d.RigidBodies.circle(x, y, jointRadius * 1.5, {
         wireframe,
-        isStatic: i === 0,
-        fixedRot: i === 0,
+        // isStatic: i === 0,
+        // fixedRot: i === 0,
         staticFriction: 0.3,
         kineticFriction: 0.1
       });
@@ -209,27 +210,28 @@ onload = function main() {
         anchorA.y += prev.radius * 0.5;
         anchorB.y -= body.radius * 0.5;
         springJoint.addJoint(prev, body, anchorA, anchorB, {
-          stiffness: 0.5,
-          restLength: jointRadius
+          stiffness: 0.9,
+          restLength: jointRadius * 4
         });
       }
     }
 
     // Distance Joint
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 10; i++) {
       const x = canvasWidth * 0.8;
-      const y = i * jointRadius * 2 + 100;
+      const y = i * jointRadius * 1.5 + 100;
       const body = new suffice2d.RigidBodies.capsule(
         x,
         y,
-        jointRadius * 0.5,
+        jointRadius * 0.25,
         jointRadius,
         {
           wireframe,
           isStatic: i === 0,
           fixedRot: i === 0,
           staticFriction: 0.3,
-          kineticFriction: 0.1
+          kineticFriction: 0.1,
+          mass: 50_000
         }
       );
 
@@ -244,13 +246,13 @@ onload = function main() {
         anchorB.y -= body.height / 2;
         distanceJoint.addJoint(prev, body, anchorA, anchorB, {
           stiffness: 0.5,
-          restLength: jointRadius * 1.25
+          restLength: jointRadius * 0.5
         });
       }
     }
 
-    // Random Circles
-    for (let i = 0; i < 20; i++) {
+    // Random Bodies
+    for (let i = 0; i < 10; i++) {
       const x = Math.random() * canvasWidth;
       const y = Math.random() * canvasHeight;
       const body = new suffice2d.RigidBodies.circle(x, y, 20, {
@@ -262,9 +264,93 @@ onload = function main() {
 
       engine.world.addBody(body);
     }
+
+    car(canvasWidth / 2, canvasHeight * 0.9, 30);
   }
 
   init();
+
+  function car(x, y, size) {
+    const staticFriction = 0.3;
+    const kineticFriction = 0.1;
+    const mass = 50_000;
+    // Joints
+
+    const distanceJoint = new suffice2d.Constraints.distanceJoint(engine, {
+      id: 1,
+      selfCollision: false
+    });
+    const springJoint = new suffice2d.Constraints.springJoint(engine, {
+      id: 1,
+      selfCollision: false
+    });
+
+    // Bodies
+    const carBody = new suffice2d.RigidBodies.capsule(
+      x,
+      y,
+      size * 0.5,
+      size * 4,
+      {
+        wireframe,
+        restitution,
+        staticFriction,
+        kineticFriction,
+        rotation: Math.PI * 0.5,
+        color: '#ef898980',
+        mass: mass
+      }
+    );
+    const carWheel1 = new suffice2d.RigidBodies.circle(
+      x - carBody.height * 0.5,
+      y,
+      size,
+      {
+        wireframe,
+        restitution,
+        staticFriction,
+        kineticFriction,
+        color: '#21212180',
+        mass
+      }
+    );
+    const carWheel2 = new suffice2d.RigidBodies.circle(
+      x + carBody.height * 0.5,
+      y,
+      size,
+      {
+        wireframe,
+        restitution,
+        staticFriction,
+        kineticFriction,
+        color: '#21212180',
+        mass
+      }
+    );
+
+    engine.world.addBodies([carBody, carWheel1, carWheel2]);
+
+    distanceJoint.addJoint(
+      carBody,
+      carWheel1,
+      new suffice2d.Vec2(x - carBody.height * 0.5, y),
+      carWheel1.position.clone(),
+      {
+        stiffness: 0.9,
+        restLength: 0
+      }
+    );
+    distanceJoint.addJoint(
+      carBody,
+      carWheel2,
+      new suffice2d.Vec2(x + carBody.height * 0.5, y),
+      carWheel2.position.clone(),
+      {
+        stiffness: 0.9,
+        restLength: 0
+      }
+    );
+  }
 
   function spawnRagdollRect(x, y, size, option = {}) {
     const id = option.id ?? Math.random() * 1826622527;
@@ -838,18 +924,23 @@ onload = function main() {
 
   function render(ctx, dt) {
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-    if (isRenderGrid) engine.grid.render(ctx);
+    if (isRenderGrid) engine.spatialGrid.render(ctx);
     engine.world.forEach(body => {
       body.render(ctx);
-      if (isRenderDebug) body.renderDebug(ctx);
+      if (isRenderDebug) {
+        body.bound.render(ctx);
+        body.renderVelocity(ctx);
+      }
     });
+    if (isRenderDebug)
+      engine.manifolds.forEach(manifold => manifold.render(ctx));
     engine.mouse.render(ctx);
 
     ctx.fillStyle = 'white';
     ctx.fillText(
       `
         ${Math.round(1000 / dt)} FPS 
-        ${engine.world.count} RigidBodies 
+        ${engine.world.rigidBodies.length} RigidBodies 
         ${engine.subSteps} Sub Steps
       `,
       canvasWidth * 0.5,
@@ -860,14 +951,13 @@ onload = function main() {
   function update(dt) {
     render(ctx, dt);
     engine.run(dt);
-    engine.mouse.constrain(dt);
   }
 
-  engine.start(update);
+  engine.animator.start(update);
 
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-      engine.pause();
-    } else engine.play();
+      engine.animator.pause();
+    } else engine.animator.play();
   });
 };

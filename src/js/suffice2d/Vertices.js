@@ -19,7 +19,7 @@ export class Vertices {
     let denominator = 0;
     const centroid = this.centroid(vertices);
     const newVertices = vertices.map(vertex =>
-      vertex.clone().subtract(centroid)
+      vertex.clone().sub(centroid)
     );
 
     for (let i = 0; i < newVertices.length; ++i) {
@@ -174,16 +174,16 @@ export class Vertices {
         continue;
       }
 
-      const prevNormal = Vec2.subtract(currPoint, prevPoint)
-        .perp(-1)
+      const prevNormal = Vec2.sub(currPoint, prevPoint)
+        .leftPerp()
         .normalize();
-      const nextNormal = Vec2.subtract(nextPoint, currPoint)
-        .perp(-1)
+      const nextNormal = Vec2.sub(nextPoint, currPoint)
+        .leftPerp()
         .normalize();
       const diagonalRadius = Math.sqrt(2 * Math.pow(currRadius, 2));
       const radiusVector = prevNormal.clone().scale(currRadius);
       const midNormal = Vec2.add(prevNormal, nextNormal).scale(0.5).normalize();
-      const scaledVertex = Vec2.subtract(
+      const scaledVertex = Vec2.sub(
         currPoint,
         Vec2.scale(midNormal, diagonalRadius)
       );

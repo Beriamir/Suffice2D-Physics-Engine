@@ -1,9 +1,10 @@
 import { Vec2 } from './Vec2.js';
 
 export class Solver {
-  static solveCollision(bodyA, bodyB, manifold) {
-    const { normal, overlapDepth, contactPoints } = manifold;
+  static solveCollision(bodyA, bodyB, manifold, deltaTime) {
+    const { normal, overlapDepth, contactPoints: cp } = manifold;
 
+    // Positional Correction
     if (bodyA.isStatic && !bodyB.isStatic) {
       bodyB.translate(normal, overlapDepth);
     } else if (!bodyA.isStatic && bodyB.isStatic) {
@@ -13,106 +14,118 @@ export class Solver {
       bodyB.translate(normal, overlapDepth * 0.5);
     }
 
-    const vA = bodyA.linearVelocity;
-    const vB = bodyB.linearVelocity;
-    const wA = bodyA.angularVelocity;
-    const wB = bodyB.angularVelocity;
+    const contactNum = cp.length;
+    const invContactNum = 1 / contactNum;
 
     const mA = bodyA.inverseMass;
     const mB = bodyB.inverseMass;
     const iA = bodyA.inverseInertia;
     const iB = bodyB.inverseInertia;
 
-    const rA = [];
-    const rB = [];
-    const tangent = [];
-    const impulse = [];
-    const friction = [];
-
+    const beta = 0.1;
+    const slop = 0.02;
+    const bias = (Math.max(overlapDepth - slop, 0) * beta) / deltaTime;
     const restitution = Math.min(bodyA.restitution, bodyB.restitution);
-    const staticFriction = Math.min(bodyA.staticFriction, bodyB.staticFriction);
-    const kineticFriction = Math.min(
-      bodyA.kineticFriction,
-      bodyB.kineticFriction
-    );
+    const sFriction = Math.max(bodyA.staticFriction, bodyB.staticFriction);
+    const kFriction = Math.max(bodyA.kineticFriction, bodyB.kineticFriction);
 
-    const contactNum = contactPoints.length;
+    const rAPerp = [];
+    const rBPerp = [];
 
-    // Compute Impulses
+    const normalTorqueA = new Float32Array(contactNum);
+    const normalTorqueB = new Float32Array(contactNum);
+    const tangentTorqueA = new Float32Array(contactNum);
+    const tangentTorqueB = new Float32Array(contactNum);
+
+    const totalNormalImpulse = new Float32Array(contactNum);
+    const tangentialImpulse = new Array(contactNum);
+
+    // Compute Correct Linear And Angular Impulses
     for (let i = 0; i < contactNum; ++i) {
-      rA[i] = Vec2.subtract(contactPoints[i], bodyA.position);
-      rB[i] = Vec2.subtract(contactPoints[i], bodyB.position);
-
-      const rAPerp = rA[i].perp();
-      const rBPerp = rB[i].perp();
-      const vTanA = Vec2.scale(rAPerp, wA);
-      const vTanB = Vec2.scale(rBPerp, wB);
-      const relVel = Vec2.subtract(Vec2.add(vB, vTanB), Vec2.add(vA, vTanA));
-      const velNormal = relVel.dot(normal);
+      rAPerp[i] = Vec2.sub(cp[i], bodyA.position).leftPerp();
+      rBPerp[i] = Vec2.sub(cp[i], bodyB.position).leftPerp();
+      const velNormal = Vec2.sub(
+        Vec2.add(
+          bodyB.linearVelocity,
+          Vec2.scale(rBPerp[i], bodyB.angularVelocity)
+        ),
+        Vec2.add(
+          bodyA.linearVelocity,
+          Vec2.scale(rAPerp[i], bodyA.angularVelocity)
+        )
+      ).dot(normal);
 
       if (velNormal > 0) {
-        tangent[i] = new Vec2();
-        impulse[i] = 0;
-        friction[i] = 0;
+        normalTorqueA[i] = 0.0;
+        normalTorqueB[i] = 0.0;
+        totalNormalImpulse[i] = 0.0;
 
         continue;
       }
 
-      tangent[i] = Vec2.subtract(
-        relVel,
-        Vec2.scale(normal, velNormal)
-      ).normalize();
+      const rnA = rAPerp[i].dot(normal);
+      const rnB = rBPerp[i].dot(normal);
+      const effNormalMass = mA + mB + rnA * rnA * iA + rnB * rnB * iB;
 
-      const rnA = rAPerp.dot(normal);
-      const rnB = rBPerp.dot(normal);
-      const rtA = rAPerp.dot(tangent[i]);
-      const rtB = rBPerp.dot(tangent[i]);
-
-      const effMassN = mA + mB + rnA * rnA * iA + rnB * rnB * iB;
-      const effMassT = mA + mB + rtA * rtA * iA + rtB * rtB * iB;
-
-      if (effMassN === 0 || effMassT === 0) {
-        continue;
+      if (effNormalMass != 0) {
+        totalNormalImpulse[i] =
+          (-(1 + restitution) * velNormal + bias) / effNormalMass;
       }
 
-      const beta = 0.02;
-      const slop = overlapDepth * 0.8;
-      const bias = Math.max(overlapDepth - slop, 0) * beta;
-
-      impulse[i] = (-(1 + restitution) * velNormal + bias) / effMassN;
-      friction[i] = -relVel.dot(tangent[i]) / effMassT;
-
-      // Clamp Impulses
-      if (impulse[i] < 0) impulse[i] = 0;
-
-      if (Math.abs(friction[i]) >= impulse[i] * staticFriction) {
-        friction[i] = -impulse[i] * kineticFriction;
-      }
-
-      impulse[i] /= contactNum;
-      friction[i] /= contactNum;
+      totalNormalImpulse[i] *= invContactNum;
+      normalTorqueA[i] = rnA * totalNormalImpulse[i];
+      normalTorqueB[i] = rnB * totalNormalImpulse[i];
     }
 
-    // Apply Impulses
-    const torqueFactor = 0.9;
-
+    // Apply Velocity Correction
     for (let i = 0; i < contactNum; ++i) {
-      const torqueA =
-        rA[i].cross(normal) * impulse[i] * iA +
-        rA[i].cross(tangent[i]) * friction[i] * iA;
-      const torqueB =
-        rB[i].cross(normal) * impulse[i] * iB +
-        rB[i].cross(tangent[i]) * friction[i] * iB;
+      bodyA.angularVelocity -= normalTorqueA[i] * iA;
+      bodyB.angularVelocity += normalTorqueB[i] * iB;
+      bodyA.linearVelocity.sub(normal, totalNormalImpulse[i] * mA);
+      bodyB.linearVelocity.add(normal, totalNormalImpulse[i] * mB);
+    }
 
-      bodyA.angularVelocity += -torqueA * torqueFactor;
-      bodyB.angularVelocity += torqueB * torqueFactor;
+    // Compute Tangential Impulses
+    for (let i = 0; i < contactNum; ++i) {
+      const relVel = Vec2.sub(
+        Vec2.add(
+          bodyB.linearVelocity,
+          Vec2.scale(rBPerp[i], bodyB.angularVelocity)
+        ),
+        Vec2.add(
+          bodyA.linearVelocity,
+          Vec2.scale(rAPerp[i], bodyA.angularVelocity)
+        )
+      );
+      const tangent = Vec2.sub(
+        relVel,
+        Vec2.scale(normal, relVel.dot(normal))
+      ).normalize();
 
-      bodyA.linearVelocity
-        .add(normal, -impulse[i] * mA)
-        .add(tangent[i], -friction[i] * mA);
-      bodyB.linearVelocity
-        .add(normal, impulse[i] * mB)
-        .add(tangent[i], friction[i] * mB);
+      const rtA = rAPerp[i].dot(tangent);
+      const rtB = rBPerp[i].dot(tangent);
+      const effTangentMass = mA + mB + rtA * rtA * iA + rtB * rtB * iB;
+      let frictionImpulse = 0.0;
+
+      if (effTangentMass != 0) {
+        frictionImpulse = -relVel.dot(tangent) / effTangentMass;
+
+        if (Math.abs(frictionImpulse) >= totalNormalImpulse[i] * sFriction) {
+          frictionImpulse = -totalNormalImpulse[i] * kFriction;
+        }
+      }
+
+      tangentTorqueA[i] = rtA * frictionImpulse;
+      tangentTorqueB[i] = rtB * frictionImpulse;
+      tangentialImpulse[i] = Vec2.scale(tangent, frictionImpulse);
+    }
+
+    // Apply Friction
+    for (let i = 0; i < contactNum; ++i) {
+      bodyA.angularVelocity -= tangentTorqueA[i] * iA;
+      bodyB.angularVelocity += tangentTorqueB[i] * iB;
+      bodyA.linearVelocity.sub(tangentialImpulse[i], mA);
+      bodyB.linearVelocity.add(tangentialImpulse[i], mB);
     }
   }
 }
